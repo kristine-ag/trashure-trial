@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta name="google-signin-client_id" content="621032929808-60pqdg07k06vst1vmljkc3jlhokrepcv.apps.googleusercontent.com">
+  <title>TRASHURE</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="A new Flutter project.">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <script defer src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.1.0/firebase-auth.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.1.0/firebase-firestore.js"></script>
+
+    <script src="https://apis.google.com/js/platform.js" async defer></script>
+    <script>
+      function initClient() {
+        gapi.load('client:auth2', function() {
+          gapi.auth2.init({
+            client_id: '621032929808-60pqdg07k06vst1vmljkc3jlhokrepcv.apps.googleusercontent.com',
+          });
+        });
+      }
+    </script>
+
+  <script type="module">
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjQu-KmwK5-zyrw3TszSurCuts-ylLHrY",
+      authDomain: "trashure-d95da.firebaseapp.com",
+      projectId: "trashure-d95da",
+      storageBucket: "trashure-d95da.appspot.com",
+      messagingSenderId: "621032929808",
+      appId: "1:621032929808:web:6c35f5f1d6b69c6f16a895",
+      measurementId: "G-HSHYRVRFGH"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+  </script>
+</head>
+
+<body>
+  <script src="main.dart.js" type="application/javascript"></script>
+</body>
+
+</html>
