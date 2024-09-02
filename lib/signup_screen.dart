@@ -43,7 +43,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
           print('User added to Firestore with UID: ${user.uid}');
 
-          // Navigate to HomePage (you can pass user info here)
           Navigator.pushReplacementNamed(context, '/');
         } else {
           print('User is null');
@@ -78,7 +77,6 @@ class _SignupScreenState extends State<SignupScreen> {
         User? user = userCredential.user;
 
         if (user != null) {
-          // Check if user already exists in Firestore
           final userDoc = await _firestore.collection('users').doc(user.uid).get();
           if (!userDoc.exists) {
             await _firestore.collection('users').doc(user.uid).set({
@@ -92,7 +90,6 @@ class _SignupScreenState extends State<SignupScreen> {
             SnackBar(content: Text('Google Sign-In Successful!')),
           );
 
-          // Navigate to HomePage (you can pass user info here)
           Navigator.pushReplacementNamed(context, '/');
         } else {
           print('User is null');
@@ -217,16 +214,6 @@ class _SignupScreenState extends State<SignupScreen> {
                               FontAwesomeIcons.google,
                               _signInWithGoogle,
                             ),
-                            // _buildSocialLoginButton(
-                            //   'Sign up with Facebook',
-                            //   FontAwesomeIcons.facebook,
-                            //   () {},
-                            // ),
-                            // _buildSocialLoginButton(
-                            //   'Sign up with Apple',
-                            //   FontAwesomeIcons.apple,
-                            //   () {},
-                            // ),
                             SizedBox(height: 16.0),
                             TextButton(
                               onPressed: () {

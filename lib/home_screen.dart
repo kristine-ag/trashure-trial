@@ -13,7 +13,7 @@ class HomeScreen extends StatelessWidget {
         elevation: 5,
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Image.asset('assets/images/logo.jpg'), // replace with your logo asset
+          child: Image.asset('assets/images/logo.jpg'), 
         ),
         title: Text(
           'Trashure',
@@ -135,10 +135,10 @@ class HomeScreen extends StatelessWidget {
   return Card(
     margin: const EdgeInsets.all(50.0),
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(15.0), // Border radius
+      borderRadius: BorderRadius.circular(15.0), 
     ),
-    clipBehavior: Clip.antiAlias, // Ensures the image is clipped according to the border radius
-    elevation: 5.0, // Adds shadow to the card
+    clipBehavior: Clip.antiAlias, 
+    elevation: 5.0, 
     child: Stack(
       children: [
         Image.asset(
@@ -174,7 +174,7 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildGoalSection(BuildContext context) {
   return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 64.0), // Padding on left and right
+    padding: const EdgeInsets.symmetric(horizontal: 64.0), 
     child: Column(
       children: [
         Text(

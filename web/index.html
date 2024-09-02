@@ -13,17 +13,35 @@
   <script defer src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.1.0/firebase-auth.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.1.0/firebase-firestore.js"></script>
+  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD1c6gdPl_vhxfXwcLQ87bQ-FRPL55eGF4&callback=initMap" defer></script>
 
-    <script src="https://apis.google.com/js/platform.js" async defer></script>
-    <script>
-      function initClient() {
-        gapi.load('client:auth2', function() {
-          gapi.auth2.init({
-            client_id: '621032929808-60pqdg07k06vst1vmljkc3jlhokrepcv.apps.googleusercontent.com',
-          });
+  <script src="https://apis.google.com/js/platform.js" async defer></script>
+
+  <script>
+    function initClient() {
+      gapi.load('client:auth2', function() {
+        gapi.auth2.init({
+          client_id: '621032929808-60pqdg07k06vst1vmljkc3jlhokrepcv.apps.googleusercontent.com',
         });
-      }
-    </script>
+      });
+    }
+
+    var map;
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: -34.397, lng: 150.644 },
+        zoom: 8,
+      });
+
+      // Add a click listener to the map
+      map.addListener('click', function(event) {
+        var lat = event.latLng.lat();
+        var lng = event.latLng.lng();
+        // Call Dart function
+        mapClicked(lat, lng);
+      });
+    }
+  </script>
 
   <script type="module">
     const firebaseConfig = {
@@ -41,6 +59,7 @@
 </head>
 
 <body>
+  <!-- Flutter app will append map div here -->
   <script src="main.dart.js" type="application/javascript"></script>
 </body>
 

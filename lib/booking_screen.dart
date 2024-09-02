@@ -9,7 +9,7 @@ class BookingScreen extends StatelessWidget {
         elevation: 0,
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Image.asset('assets/images/logo.jpg'), // replace with your logo asset
+          child: Image.asset('assets/images/logo.jpg'), 
         ),
         title: Text(
           'Trashure',
@@ -26,7 +26,7 @@ class BookingScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: CircleAvatar(
-              backgroundImage: AssetImage('assets/images/user.jpg'), // replace with your user's image asset
+              backgroundImage: AssetImage('assets/images/logo.jpg'), 
             ),
           ),
         ],
@@ -52,7 +52,6 @@ class BookingScreen extends StatelessWidget {
           if (title == 'Home') {
             Navigator.pushNamed(context, '/');
           } else if (title == 'Book') {
-            // Already on this page, so no action needed
           } else if (title == 'Pricing') {
             Navigator.pushNamed(context, '/pricing');
           }
@@ -86,7 +85,7 @@ class BookingScreen extends StatelessWidget {
         SizedBox(height: 20),
         ElevatedButton(
           onPressed: () {
-            // Add your next action here
+            Navigator.pushNamed(context, '/Address');
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green[700],
@@ -194,7 +193,7 @@ class BookingScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '₱ ${pricePerKg.toStringAsFixed(1)}', // Estimated profit calculation
+                    '₱ ${pricePerKg.toStringAsFixed(1)}', 
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

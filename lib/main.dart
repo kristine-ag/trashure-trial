@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:trashure/address_screen.dart';
 import 'package:trashure/booking_screen.dart';
 import 'firebase_options.dart';
 import 'signup_screen.dart';
@@ -30,6 +31,7 @@ class MyApp extends StatelessWidget {
         '/signup': (context) => SignupScreen(),
         '/login': (context) => LoginScreen(),
         '/Book': (context) => BookingScreen(),
+        '/Address': (context) => AddressScreen()
       },
     );
   }

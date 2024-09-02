@@ -17,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       try {
-        // Attempt to log in
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
@@ -27,7 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
           SnackBar(content: Text('Login Successful!')),
         );
 
-        // Navigate to HomePage (you can pass user info here)
         Navigator.pushReplacementNamed(context, '/');
       } on FirebaseAuthException catch (e) {
         String message;
@@ -77,7 +75,6 @@ class _LoginScreenState extends State<LoginScreen> {
             SnackBar(content: Text('Google Sign-In Successful!')),
           );
 
-          // Navigate to HomePage (you can pass user info here)
           Navigator.pushReplacementNamed(context, '/');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -198,20 +195,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               FontAwesomeIcons.google,
                               _signInWithGoogle,
                             ),
-                            // _buildSocialLoginButton(
-                            //   'Log in with Facebook',
-                            //   FontAwesomeIcons.facebook,
-                            //   () {
-                            //     // TODO: Implement Facebook sign-in functionality
-                            //   },
-                            // ),
-                            // _buildSocialLoginButton(
-                            //   'Log in with Apple',
-                            //   FontAwesomeIcons.apple,
-                            //   () {
-                            //     // TODO: Implement Apple sign-in functionality
-                            //   },
-                            // ),
                             SizedBox(height: 16.0),
                             TextButton(
                               onPressed: () {
