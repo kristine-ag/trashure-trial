@@ -11,19 +11,14 @@ class AddressScreen extends StatefulWidget {
 }
 
 class _AddressScreenState extends State<AddressScreen> {
-  GoogleMapController? mapController;
-  final Set<Marker> _markers = {};
-  final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
-
+  late GoogleMapController mapController;
+  final LatLng _center = const LatLng(7.0731, 125.6122);
   final TextEditingController _defaultAddressController = TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
-  final User? user = FirebaseAuth.instance.currentUser;
+  final User? user = FirebaseAuth.instance.currentUser; // Get the current user
 
-  @override
-  void dispose() {
-    _defaultAddressController.dispose();
-    _landmarkController.dispose();
-    super.dispose();
+  void _onMapCreated(GoogleMapController controller) {
+    mapController = controller;
   }
 
   Future<void> _getAddressFromLatLng(LatLng position) async {
@@ -37,43 +32,25 @@ class _AddressScreenState extends State<AddressScreen> {
         });
       }
     } catch (e) {
-      print('Error retrieving address: $e');
-    }
-  }
-
-  Future<void> _getLatLngFromAddress(String address) async {
-    try {
-      List<Location> locations = await locationFromAddress(address);
-      if (locations.isNotEmpty) {
-        final location = locations[0];
-        final latLng = LatLng(location.latitude, location.longitude);
-
-        // Move the map to the new location
-        mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
-
-        setState(() {
-          _markers.clear(); // Clear previous markers
-          _markers.add(Marker(
-            markerId: MarkerId(latLng.toString()),
-            position: latLng,
-            infoWindow: InfoWindow(
-              title: 'Selected Location',
-              snippet: address,
-            ),
-          ));
-        });
-      }
-    } catch (e) {
-      print('Error retrieving location: $e');
+      print(e);
     }
   }
 
   @override
+  void dispose() {
+    _defaultAddressController.dispose();
+    _landmarkController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Check if user is not logged in
     if (user == null) {
       return _buildLoginPrompt(context);
     }
 
+    // If the user is logged in, show the main content of AddressScreen
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -90,6 +67,11 @@ class _AddressScreenState extends State<AddressScreen> {
             fontSize: 24,
           ),
         ),
+        actions: [
+          _buildAppBarItem(context, 'Home'),
+          _buildAppBarItem(context, 'Book'),
+          _buildAppBarItem(context, 'Pricing'),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -132,9 +114,6 @@ class _AddressScreenState extends State<AddressScreen> {
                               border: OutlineInputBorder(),
                               hintText: 'Enter default address',
                             ),
-                            onSubmitted: (value) {
-                              _getLatLngFromAddress(value); // Fetch LatLng from address
-                            },
                           ),
                           const SizedBox(height: 20),
                           const Text(
@@ -165,27 +144,13 @@ class _AddressScreenState extends State<AddressScreen> {
                         border: Border.all(color: Colors.green, width: 2),
                       ),
                       child: GoogleMap(
-                        onMapCreated: (controller) {
-                          mapController = controller; // Assign the map controller
-                        },
+                        onMapCreated: _onMapCreated,
                         initialCameraPosition: CameraPosition(
-                          target: _initialPosition,
-                          zoom: 15,
+                          target: _center,
+                          zoom: 15.0,
                         ),
-                        markers: _markers,
                         onTap: (LatLng position) {
-                          setState(() {
-                            _markers.clear();
-                            _markers.add(Marker(
-                              markerId: MarkerId(position.toString()),
-                              position: position,
-                              infoWindow: InfoWindow(
-                                title: 'Selected Location',
-                                snippet: '${position.latitude}, ${position.longitude}',
-                              ),
-                            ));
-                          });
-                          _getAddressFromLatLng(position); // Fetch address from tapped location
+                          _getAddressFromLatLng(position);
                         },
                       ),
                     ),
@@ -199,7 +164,7 @@ class _AddressScreenState extends State<AddressScreen> {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context);
+                    Navigator.pop(context); // Navigate back to HomeScreen
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey,
@@ -216,11 +181,8 @@ class _AddressScreenState extends State<AddressScreen> {
                 const SizedBox(width: 20),
                 ElevatedButton(
                   onPressed: () {
-                    final address = _defaultAddressController.text;
-                    final landmark = _landmarkController.text;
-                    final fullAddress = '$address, Landmark: $landmark';
-
-                    Navigator.pop(context, fullAddress);
+                    // Optionally pass address data back to HomeScreen or proceed
+                    // Navigator.pushNamed(context, '/nextScreen'); // Example for next navigation
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -244,6 +206,7 @@ class _AddressScreenState extends State<AddressScreen> {
     );
   }
 
+  // Function to build the login prompt when the user is not logged in
   Widget _buildLoginPrompt(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -270,6 +233,7 @@ class _AddressScreenState extends State<AddressScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
+                // Navigate to the login screen
                 Navigator.pushNamed(context, '/login');
               },
               style: ElevatedButton.styleFrom(
@@ -287,16 +251,60 @@ class _AddressScreenState extends State<AddressScreen> {
     );
   }
 
+  Widget _buildAppBarItem(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: TextButton(
+        onPressed: () {
+          Navigator.pushNamed(context, '/$title'.toLowerCase()); // Correct routing based on title
+        },
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.black,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFooter(BuildContext context) {
     return Container(
       color: Colors.grey[200],
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: const Center(
-        child: Text(
-          '© 2024 Trashure',
-          style: TextStyle(color: Colors.grey),
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildFooterColumn('Our Scope', ['Sample District 1', 'Sample District 2', 'Sample District 3']),
+          _buildFooterColumn('Our Partners', ['Lalala Inc.', 'Trash R Us', 'SM Cares']),
+          _buildFooterColumn('About Us', ['Our Story', 'Work with us']),
+          _buildFooterColumn('Contact Us', ['Email Us', 'Support']),
+        ],
       ),
+    );
+  }
+
+  Widget _buildFooterColumn(String title, List<String> items) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (var item in items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Text(
+              item,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+            ),
+          ),
+      ],
     );
   }
 }

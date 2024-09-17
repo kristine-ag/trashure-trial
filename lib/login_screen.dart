@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -23,10 +26,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login Successful!')),
+          const SnackBar(content: Text('Login Successful!')),
         );
 
-        Navigator.pushReplacementNamed(context, '/');
+        _redirectToLastRoute();
       } on FirebaseAuthException catch (e) {
         String message;
         switch (e.code) {
@@ -72,20 +75,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (user != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Google Sign-In Successful!')),
+            const SnackBar(content: Text('Google Sign-In Successful!')),
           );
 
-          Navigator.pushReplacementNamed(context, '/');
+          _redirectToLastRoute();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Google Sign-In Failed: User is null')),
+            const SnackBar(content: Text('Google Sign-In Failed: User is null')),
           );
         }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google Sign-In Failed')),
+        const SnackBar(content: Text('Google Sign-In Failed')),
       );
+    }
+  }
+
+  Future<void> _redirectToLastRoute() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? lastRoute = prefs.getString('lastRoute');
+
+    if (lastRoute != null && lastRoute.isNotEmpty) {
+      Navigator.pushReplacementNamed(context, lastRoute);
+    } else {
+      Navigator.pushReplacementNamed(context, '/');
     }
   }
 
@@ -102,11 +116,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 borderRadius: BorderRadius.circular(8.0),
               ),
               elevation: 4.0,
-              shadowColor: Color.fromRGBO(26, 33, 52, 0.11),
+              shadowColor: const Color.fromRGBO(26, 33, 52, 0.11),
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
                 child: Container(
-                  constraints: BoxConstraints(
+                  constraints: const BoxConstraints(
                     maxWidth: 460.0,
                     minWidth: 320.0,
                   ),
@@ -130,14 +144,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(height: 16.0),
+                      const SizedBox(height: 16.0),
                       Form(
                         key: _formKey,
                         child: Column(
                           children: [
                             TextFormField(
                               controller: _emailController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 labelText: 'Email',
                                 border: OutlineInputBorder(),
                               ),
@@ -151,10 +165,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return null;
                               },
                             ),
-                            SizedBox(height: 16.0),
+                            const SizedBox(height: 16.0),
                             TextFormField(
                               controller: _passwordController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 labelText: 'Password',
                                 border: OutlineInputBorder(),
                               ),
@@ -166,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return null;
                               },
                             ),
-                            SizedBox(height: 16.0),
+                            const SizedBox(height: 16.0),
                             ElevatedButton(
                               onPressed: _login,
                               style: ElevatedButton.styleFrom(
@@ -174,28 +188,28 @@ class _LoginScreenState extends State<LoginScreen> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8.0),
                                 ),
-                                minimumSize: Size(double.infinity, 50),
+                                minimumSize: const Size(double.infinity, 50),
                               ),
-                              child: Text(
+                              child: const Text(
                                 'Log in',
                                 style: TextStyle(color: Colors.white),
                               ),
                             ),
-                            SizedBox(height: 16.0),
+                            const SizedBox(height: 16.0),
                             TextButton(
                               onPressed: () {
                                 // TODO: Implement forgot password functionality
                               },
-                              child: Text("Forgot your Password?"),
+                              child: const Text("Forgot your Password?"),
                             ),
-                            Divider(),
-                            SizedBox(height: 16.0),
+                            const Divider(),
+                            const SizedBox(height: 16.0),
                             _buildSocialLoginButton(
                               'Log in with Google',
                               FontAwesomeIcons.google,
                               _signInWithGoogle,
                             ),
-                            SizedBox(height: 16.0),
+                            const SizedBox(height: 16.0),
                             TextButton(
                               onPressed: () {
                                 Navigator.pushNamed(context, '/signup');
@@ -205,9 +219,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: TextStyle(color: Colors.teal[800]),
                               ),
                             ),
-                            SizedBox(height: 16.0),
-                            Divider(),
-                            Text(
+                            const SizedBox(height: 16.0),
+                            const Divider(),
+                            const Text(
                               'Terms and Conditions · Privacy Policy · CA Privacy Notice',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 12.0),
@@ -234,7 +248,7 @@ class _LoginScreenState extends State<LoginScreen> {
         icon: FaIcon(icon, size: 24.0),
         label: Text(text),
         style: OutlinedButton.styleFrom(
-          minimumSize: Size(double.infinity, 50),
+          minimumSize: const Size(double.infinity, 50),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.0),
           ),

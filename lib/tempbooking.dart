@@ -1,9 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:trashure/address_screen.dart';
-import 'package:trashure/bookpreview_screen.dart';
-import 'package:trashure/components/appbar.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key});
@@ -21,13 +18,106 @@ class _BookingScreenState extends State<BookingScreen> {
   // Map to track quantities for products dynamically
   final Map<String, ValueNotifier<int>> _productQuantities = {};
 
-  // Map to track product prices dynamically
-  final Map<String, double> _productPrices = {};
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppBar(),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset('assets/images/logo.jpg'),
+        ),
+        title: Text(
+          'Trashure',
+          style: TextStyle(
+            color: Colors.green[700],
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
+        ),
+        actions: [
+          _buildAppBarItem(context, 'Home'),
+          _buildAppBarItem(context, 'Book'),
+          _buildAppBarItem(context, 'Pricing'),
+          if (user != null)
+            FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user!.uid)
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: CircularProgressIndicator(),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text(
+                      'Error loading user data',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
+
+                final userData = snapshot.data?.data() as Map<String, dynamic>?;
+                final userName =
+                    userData != null && userData.containsKey('name')
+                        ? userData['name']
+                        : 'User';
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundImage: NetworkImage(user!.photoURL ??
+                            'https://via.placeholder.com/150'),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        userName,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.logout, color: Colors.green[700]),
+                        onPressed: () async {
+                          await FirebaseAuth.instance.signOut();
+                          Navigator.pushNamedAndRemoveUntil(
+                              context, '/login', (route) => false);
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/login');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[400],
+                ),
+                child: const Row(
+                  children: [
+                    Text('Login Now'),
+                    Icon(Icons.arrow_forward, size: 16),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -47,48 +137,9 @@ class _BookingScreenState extends State<BookingScreen> {
             }),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _hasSelectedItems()
-                  ? () async {
-                      // Collect selected items, their quantities, and prices
-                      Map<String, dynamic> selectedItems = {};
-
-                      _productQuantities.forEach((productName, notifier) {
-                        if (notifier.value > 0) {
-                          selectedItems[productName] = {
-                            'quantity': notifier.value,
-                            'price_per_kg': _productPrices[productName],
-                            'total_price': notifier.value *
-                                _productPrices[productName]!,
-                          };
-                        }
-                      });
-
-                      // Navigate to AddressScreen to get the user's address
-                      final address = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AddressScreen(),
-                        ),
-                      );
-
-                      if (address != null) {
-                        // Navigate to BookingPreviewScreen after getting the address
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => BookingPreviewScreen(
-                              selectedItems: selectedItems,
-                              address: address,
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  : () {
-                      // Show alert dialog if no items are selected
-                      _showAlertDialog(context, 'No items selected',
-                          'Please select at least one recyclable item before proceeding.');
-                    },
+              onPressed: () {
+                Navigator.pushNamed(context, '/Address');
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[700],
               ),
@@ -107,29 +158,41 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  // Check if any quantity is greater than zero
-  bool _hasSelectedItems() {
-    return _productQuantities.values.any((notifier) => notifier.value > 0);
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Center(
+        child: Text(
+          title,
+          style: TextStyle(
+            color: Colors.green[700],
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
   }
 
-  // Show an alert dialog when no items are selected
-  void _showAlertDialog(BuildContext context, String title, String message) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              child: const Text("OK"),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+  Widget _buildAppBarItem(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: TextButton(
+        onPressed: () {
+          if (title == 'Home') {
+            Navigator.pushNamed(context, '/');
+          } else if (title == 'Book') {
+          } else if (title == 'Pricing') {
+            Navigator.pushNamed(context, '/Pricing');
+          }
+        },
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.black,
+          ),
+        ),
+      ),
     );
   }
 
@@ -170,10 +233,9 @@ class _BookingScreenState extends State<BookingScreen> {
                 final productPrice = productData['price'] as double;
                 final productImage = productData['picture'];
 
-                // Initialize quantity and price for each product if not set
+                // Initialize quantity for each product if not set
                 _productQuantities.putIfAbsent(
                     productName, () => ValueNotifier<int>(0));
-                _productPrices.putIfAbsent(productName, () => productPrice);
 
                 return _buildProductCard(
                   context,
@@ -192,22 +254,6 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Center(
-        child: Text(
-          title,
-          style: TextStyle(
-            color: Colors.green[700],
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildProductCard(
     BuildContext context,
     String title,
@@ -222,7 +268,8 @@ class _BookingScreenState extends State<BookingScreen> {
     quantityController.text = _productQuantities[title]!.value.toString();
 
     return SizedBox(
-      width: (MediaQuery.of(context).size.width - 48) / 2, // Adjust width for two columns
+      width: (MediaQuery.of(context).size.width - 48) /
+          2, // Adjust width for two columns
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(
@@ -304,26 +351,27 @@ class _BookingScreenState extends State<BookingScreen> {
                           }
                         },
                       ),
+                      // TextField to input the quantity
                       SizedBox(
-                        width: 40,
+                        width: 50,
+                        height: 40,
                         child: TextField(
                           controller: quantityController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
-                          onChanged: (newValue) {
-                            final int? parsedQuantity =
-                                int.tryParse(newValue);
-                            if (parsedQuantity != null &&
-                                parsedQuantity >= 0) {
-                              _productQuantities[title]!.value =
-                                  parsedQuantity;
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (value) {
+                            // Update the quantity value when the text changes
+                            int? newQuantity = int.tryParse(value);
+                            if (newQuantity != null) {
+                              _productQuantities[title]!.value = newQuantity;
                             }
                           },
-                          style: const TextStyle(fontSize: 18),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.all(0),
-                          ),
                         ),
                       ),
                       IconButton(
@@ -331,6 +379,21 @@ class _BookingScreenState extends State<BookingScreen> {
                         onPressed: () {
                           _productQuantities[title]!.value += 1;
                         },
+                      ),
+                      Text(
+                        'Estimated Profit',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      Text(
+                        '₱ ${(pricePerKg * quantity).toStringAsFixed(1)}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
                       ),
                     ],
                   );
@@ -344,33 +407,57 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildToggleButton(
-    bool showAll,
-    String seeMoreText,
-    String seeLessText,
-    VoidCallback onPressed,
-  ) {
-    return TextButton(
-      onPressed: onPressed,
-      child: Text(
-        showAll ? seeLessText : seeMoreText,
-        style: TextStyle(color: Colors.green[700]),
+      bool showAll, String moreText, String lessText, VoidCallback onPressed) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: onPressed,
+        child: Text(
+          showAll ? lessText : moreText,
+          style: TextStyle(color: Colors.green[700]),
+        ),
       ),
     );
   }
 
   Widget _buildFooter(BuildContext context) {
+    return Container(
+      color: Colors.grey[200],
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildFooterColumn('Our Scope',
+              ['Sample District 1', 'Sample District 2', 'Sample District 3']),
+          _buildFooterColumn(
+              'Our Partners', ['Lalala Inc.', 'Trash R Us', 'SM Cares']),
+          _buildFooterColumn('About Us', ['Our Story', 'Work with us']),
+          _buildFooterColumn('Contact Us', ['Our Story', 'Work with us']),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterColumn(String title, List<String> items) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(thickness: 1),
-        const SizedBox(height: 10),
         Text(
-          'TRASHURE © 2023. All rights reserved.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
         ),
         const SizedBox(height: 10),
+        for (var item in items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Text(
+              item,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+            ),
+          ),
       ],
     );
   }
