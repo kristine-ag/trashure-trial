@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:trashure/components/appbar.dart';
-import 'package:trashure/components/footer.dart';
 
 class BookingPreviewScreen extends StatelessWidget {
   final Map<String, dynamic> selectedItems;
@@ -15,14 +14,17 @@ class BookingPreviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Calculate the total weight and total price of the selected items
-    double totalWeight = selectedItems.entries.fold(0, (previousValue, element) {
+    double totalWeight =
+        selectedItems.entries.fold(0, (previousValue, element) {
       // Use null-aware operators to safely handle null values
-      double itemWeight = (element.value['quantity'] ?? 0) * 1.0; // If quantity is null, treat it as 0
+      double itemWeight = (element.value['quantity'] ?? 0) *
+          1.0; // If quantity is null, treat it as 0
       return previousValue + itemWeight;
     });
 
     double totalPrice = selectedItems.entries.fold(0, (previousValue, element) {
-      double itemPrice = (element.value['quantity'] ?? 0) * (element.value['price_per_kg'] ?? 0); // Handle null price
+      double itemPrice = (element.value['quantity'] ?? 0) *
+          (element.value['price_per_kg'] ?? 0); // Handle null price
       return previousValue + itemPrice;
     });
 
@@ -52,7 +54,7 @@ class BookingPreviewScreen extends StatelessWidget {
                       const SizedBox(height: 10),
                       Container(
                         height: 4,
-                        width: 100,
+                        width: 400,
                         color: Colors.green[700],
                       ),
                     ],
@@ -71,7 +73,8 @@ class BookingPreviewScreen extends StatelessWidget {
                         flex: 6,
                         child: _buildSelectedItemsWithPrices(),
                       ),
-                      const SizedBox(width: 20), // Add spacing between the cards
+                      const SizedBox(
+                          width: 20), // Add spacing between the cards
 
                       // Address Card takes 40% of the screen
                       Flexible(
@@ -103,8 +106,7 @@ class BookingPreviewScreen extends StatelessWidget {
                 const SizedBox(height: 40),
 
                 // Footer
-                const Spacer(),
-                const CustomFooter(),
+                _buildFooter(context),
               ],
             );
           },
@@ -183,8 +185,10 @@ class BookingPreviewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             ...selectedItems.entries.map((entry) {
-              double itemQuantity = entry.value['quantity'] ?? 0; // Handle null quantity
-              double pricePerKg = entry.value['price_per_kg'] ?? 0; // Handle null price
+              double itemQuantity =
+                  entry.value['quantity'] ?? 0; // Handle null quantity
+              double pricePerKg =
+                  entry.value['price_per_kg'] ?? 0; // Handle null price
               double totalPriceForItem = itemQuantity * pricePerKg;
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -251,7 +255,8 @@ class BookingPreviewScreen extends StatelessWidget {
   }
 
   // Widget to display total weight and total price
-  Widget _buildTotalWeightAndPriceSection(double totalWeight, double totalPrice) {
+  Widget _buildTotalWeightAndPriceSection(
+      double totalWeight, double totalPrice) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.green[100],
@@ -311,17 +316,52 @@ class BookingPreviewScreen extends StatelessWidget {
     return Center(
       child: ElevatedButton(
         onPressed: () {
-          // Handle the booking process here
+          // Navigate to the schedule screen and pass the selectedItems and address
+          Navigator.pushNamed(
+            context,
+            '/Schedule',
+            arguments: {
+              'selectedItems': selectedItems,
+              'address': address,
+            },
+          );
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green[700],
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
         ),
         child: const Text(
-          'Book Now',
+          'Next',
           style: TextStyle(fontSize: 18, color: Colors.white),
         ),
+      ),
+    );
+  }
+
+  // Footer widget
+  Widget _buildFooter(BuildContext context) {
+    return Center(
+      child: Column(
+        children: const [
+          Text(
+            'Thank you for using Trashure!',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: Colors.black54,
+            ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Please recycle responsibly.',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.black54,
+            ),
+          ),
+        ],
       ),
     );
   }

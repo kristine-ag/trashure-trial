@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:trashure/address_screen.dart';
 import 'package:trashure/booking_screen.dart';
+import 'package:trashure/booksched_screen.dart';
 import 'package:trashure/pricing_screen.dart';
 import 'firebase_options.dart';
 import 'signup_screen.dart';
@@ -38,7 +39,8 @@ class MyApp extends StatelessWidget {
         '/login': (context) => LoginScreen(),
         '/Book': (context) => BookingScreen(),
         '/Address': (context) => AddressScreen(),
-        '/Pricing': (context) => PricingScreen()
+        '/Pricing': (context) => PricingScreen(),
+        '/Schedule': (context) => BookSchedScreen(),
       },
     );
   }

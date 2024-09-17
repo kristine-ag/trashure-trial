@@ -33,6 +33,13 @@ class _BookingScreenState extends State<BookingScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             _buildSectionTitle('PLASTICS'),
+            const SizedBox(height: 10),
+            Container(
+              height: 4,
+              width: 400,
+              color: Colors.green[700],
+            ),
+            const SizedBox(height: 10),
             _buildProductsSection(context, 'plastics', _showAllPlastics, () {
               setState(() {
                 _showAllPlastics = !_showAllPlastics;
@@ -40,6 +47,13 @@ class _BookingScreenState extends State<BookingScreen> {
             }),
             const SizedBox(height: 20),
             _buildSectionTitle('METALS'),
+            const SizedBox(height: 10),
+            Container(
+              height: 4,
+              width: 400,
+              color: Colors.green[700],
+            ),
+            const SizedBox(height: 10),
             _buildProductsSection(context, 'metals', _showAllMetals, () {
               setState(() {
                 _showAllMetals = !_showAllMetals;
@@ -47,48 +61,43 @@ class _BookingScreenState extends State<BookingScreen> {
             }),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _hasSelectedItems()
-                  ? () async {
-                      // Collect selected items, their quantities, and prices
-                      Map<String, dynamic> selectedItems = {};
+              onPressed: () async {
+                // Collect selected items, their quantities, and prices
+                Map<String, dynamic> selectedItems = {};
 
-                      _productQuantities.forEach((productName, notifier) {
-                        if (notifier.value > 0) {
-                          selectedItems[productName] = {
-                            'quantity': notifier.value,
-                            'price_per_kg': _productPrices[productName],
-                            'total_price': notifier.value *
-                                _productPrices[productName]!,
-                          };
-                        }
-                      });
+                _productQuantities.forEach((productName, notifier) {
+                  if (notifier.value > 0) {
+                    selectedItems[productName] = {
+                      'quantity': notifier.value,
+                      'price_per_kg':
+                          _productPrices[productName], // Adding price per kg
+                      'total_price': notifier.value *
+                          _productPrices[productName]! // Calculate total price
+                    };
+                  }
+                });
 
-                      // Navigate to AddressScreen to get the user's address
-                      final address = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AddressScreen(),
-                        ),
-                      );
+                // Navigate to AddressScreen to get the user's address
+                final address = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddressScreen(),
+                  ),
+                );
 
-                      if (address != null) {
-                        // Navigate to BookingPreviewScreen after getting the address
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => BookingPreviewScreen(
-                              selectedItems: selectedItems,
-                              address: address,
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  : () {
-                      // Show alert dialog if no items are selected
-                      _showAlertDialog(context, 'No items selected',
-                          'Please select at least one recyclable item before proceeding.');
-                    },
+                if (address != null) {
+                  // Navigate to BookingPreviewScreen after getting the address
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BookingPreviewScreen(
+                        selectedItems: selectedItems,
+                        address: address,
+                      ),
+                    ),
+                  );
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[700],
               ),
@@ -104,32 +113,6 @@ class _BookingScreenState extends State<BookingScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  // Check if any quantity is greater than zero
-  bool _hasSelectedItems() {
-    return _productQuantities.values.any((notifier) => notifier.value > 0);
-  }
-
-  // Show an alert dialog when no items are selected
-  void _showAlertDialog(BuildContext context, String title, String message) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              child: const Text("OK"),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -194,14 +177,15 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding:EdgeInsets.fromLTRB(1, 16, 1, 1),
       child: Center(
         child: Text(
           title,
           style: TextStyle(
-            color: Colors.green[700],
-            fontSize: 32,
+            fontSize: 28,
             fontWeight: FontWeight.bold,
+            color: Colors.green[700],
+            letterSpacing: 1.5,
           ),
         ),
       ),
@@ -222,7 +206,8 @@ class _BookingScreenState extends State<BookingScreen> {
     quantityController.text = _productQuantities[title]!.value.toString();
 
     return SizedBox(
-      width: (MediaQuery.of(context).size.width - 48) / 2, // Adjust width for two columns
+      width: (MediaQuery.of(context).size.width - 48) /
+          2, // Adjust width for two columns
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(
@@ -238,6 +223,8 @@ class _BookingScreenState extends State<BookingScreen> {
                     flex: 3,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(10),
+                        bottomRight: Radius.circular(10),
                         topLeft: Radius.circular(10),
                         bottomLeft: Radius.circular(10),
                       ),
@@ -304,26 +291,27 @@ class _BookingScreenState extends State<BookingScreen> {
                           }
                         },
                       ),
+                      // TextField to input the quantity
                       SizedBox(
-                        width: 40,
+                        width: 50,
+                        height: 40,
                         child: TextField(
                           controller: quantityController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
-                          onChanged: (newValue) {
-                            final int? parsedQuantity =
-                                int.tryParse(newValue);
-                            if (parsedQuantity != null &&
-                                parsedQuantity >= 0) {
-                              _productQuantities[title]!.value =
-                                  parsedQuantity;
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (value) {
+                            // Update the quantity value when the text changes
+                            int? newQuantity = int.tryParse(value);
+                            if (newQuantity != null) {
+                              _productQuantities[title]!.value = newQuantity;
                             }
                           },
-                          style: const TextStyle(fontSize: 18),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.all(0),
-                          ),
                         ),
                       ),
                       IconButton(
@@ -331,6 +319,21 @@ class _BookingScreenState extends State<BookingScreen> {
                         onPressed: () {
                           _productQuantities[title]!.value += 1;
                         },
+                      ),
+                      Text(
+                        'Estimated Profit',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      Text(
+                        '₱ ${(pricePerKg * quantity).toStringAsFixed(1)}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
                       ),
                     ],
                   );
@@ -344,33 +347,57 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildToggleButton(
-    bool showAll,
-    String seeMoreText,
-    String seeLessText,
-    VoidCallback onPressed,
-  ) {
-    return TextButton(
-      onPressed: onPressed,
-      child: Text(
-        showAll ? seeLessText : seeMoreText,
-        style: TextStyle(color: Colors.green[700]),
+      bool showAll, String moreText, String lessText, VoidCallback onPressed) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: onPressed,
+        child: Text(
+          showAll ? lessText : moreText,
+          style: TextStyle(color: Colors.green[700]),
+        ),
       ),
     );
   }
 
   Widget _buildFooter(BuildContext context) {
+    return Container(
+      color: Colors.grey[200],
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildFooterColumn('Our Scope',
+              ['Sample District 1', 'Sample District 2', 'Sample District 3']),
+          _buildFooterColumn(
+              'Our Partners', ['Lalala Inc.', 'Trash R Us', 'SM Cares']),
+          _buildFooterColumn('About Us', ['Our Story', 'Work with us']),
+          _buildFooterColumn('Contact Us', ['Our Story', 'Work with us']),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterColumn(String title, List<String> items) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(thickness: 1),
-        const SizedBox(height: 10),
         Text(
-          'TRASHURE © 2023. All rights reserved.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
         ),
         const SizedBox(height: 10),
+        for (var item in items)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: Text(
+              item,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+            ),
+          ),
       ],
     );
   }

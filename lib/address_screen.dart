@@ -15,7 +15,8 @@ class _AddressScreenState extends State<AddressScreen> {
   final Set<Marker> _markers = {};
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
 
-  final TextEditingController _defaultAddressController = TextEditingController();
+  final TextEditingController _defaultAddressController =
+      TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
   final User? user = FirebaseAuth.instance.currentUser;
 
@@ -28,10 +29,12 @@ class _AddressScreenState extends State<AddressScreen> {
 
   Future<void> _getAddressFromLatLng(LatLng position) async {
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+      List<Placemark> placemarks =
+          await placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
-        String address = '${place.street}, ${place.locality}, ${place.administrativeArea}, ${place.country}';
+        String address =
+            '${place.street}, ${place.locality}, ${place.administrativeArea}, ${place.country}';
         setState(() {
           _defaultAddressController.text = address;
         });
@@ -96,15 +99,22 @@ class _AddressScreenState extends State<AddressScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-            const Center(
+            Center(
               child: Text(
                 'CONFIRM YOUR ADDRESS',
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Colors.green,
+                  color: Colors.green[700],
+                  letterSpacing: 1.5,
                 ),
               ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              height: 4,
+              width: 400,
+              color: Colors.green[700],
             ),
             const SizedBox(height: 20),
             Padding(
@@ -133,7 +143,8 @@ class _AddressScreenState extends State<AddressScreen> {
                               hintText: 'Enter default address',
                             ),
                             onSubmitted: (value) {
-                              _getLatLngFromAddress(value); // Fetch LatLng from address
+                              _getLatLngFromAddress(
+                                  value); // Fetch LatLng from address
                             },
                           ),
                           const SizedBox(height: 20),
@@ -166,7 +177,8 @@ class _AddressScreenState extends State<AddressScreen> {
                       ),
                       child: GoogleMap(
                         onMapCreated: (controller) {
-                          mapController = controller; // Assign the map controller
+                          mapController =
+                              controller; // Assign the map controller
                         },
                         initialCameraPosition: CameraPosition(
                           target: _initialPosition,
@@ -181,11 +193,13 @@ class _AddressScreenState extends State<AddressScreen> {
                               position: position,
                               infoWindow: InfoWindow(
                                 title: 'Selected Location',
-                                snippet: '${position.latitude}, ${position.longitude}',
+                                snippet:
+                                    '${position.latitude}, ${position.longitude}',
                               ),
                             ));
                           });
-                          _getAddressFromLatLng(position); // Fetch address from tapped location
+                          _getAddressFromLatLng(
+                              position); // Fetch address from tapped location
                         },
                       ),
                     ),
@@ -274,7 +288,8 @@ class _AddressScreenState extends State<AddressScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
               child: const Text(
                 'Login Now',

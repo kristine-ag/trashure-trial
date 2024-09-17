@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:trashure/address_screen.dart';
+import 'package:trashure/bookpreview_screen.dart';
+import 'package:trashure/components/appbar.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key});
@@ -18,106 +21,13 @@ class _BookingScreenState extends State<BookingScreen> {
   // Map to track quantities for products dynamically
   final Map<String, ValueNotifier<int>> _productQuantities = {};
 
+  // Map to track product prices dynamically
+  final Map<String, double> _productPrices = {};
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Image.asset('assets/images/logo.jpg'),
-        ),
-        title: Text(
-          'Trashure',
-          style: TextStyle(
-            color: Colors.green[700],
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-          ),
-        ),
-        actions: [
-          _buildAppBarItem(context, 'Home'),
-          _buildAppBarItem(context, 'Book'),
-          _buildAppBarItem(context, 'Pricing'),
-          if (user != null)
-            FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user!.uid)
-                  .get(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: CircularProgressIndicator(),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text(
-                      'Error loading user data',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  );
-                }
-
-                final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                final userName =
-                    userData != null && userData.containsKey('name')
-                        ? userData['name']
-                        : 'User';
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: NetworkImage(user!.photoURL ??
-                            'https://via.placeholder.com/150'),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        userName,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.logout, color: Colors.green[700]),
-                        onPressed: () async {
-                          await FirebaseAuth.instance.signOut();
-                          Navigator.pushNamedAndRemoveUntil(
-                              context, '/login', (route) => false);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              },
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/login');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[400],
-                ),
-                child: const Row(
-                  children: [
-                    Text('Login Now'),
-                    Icon(Icons.arrow_forward, size: 16),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
+      appBar: CustomAppBar(),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -137,9 +47,50 @@ class _BookingScreenState extends State<BookingScreen> {
             }),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/Address');
-              },
+              onPressed: _hasSelectedItems()
+                  ? () async {
+                      // Collect selected items, their quantities, and prices
+                      Map<String, dynamic> selectedItems = {};
+
+                      _productQuantities.forEach((productName, notifier) {
+                        if (notifier.value > 0) {
+                          selectedItems[productName] = {
+                            'quantity': notifier.value,
+                            'price_per_kg': _productPrices[
+                                productName], // Adding price per kg
+                            'total_price': notifier.value *
+                                _productPrices[
+                                    productName]! // Calculate total price
+                          };
+                        }
+                      });
+
+                      // Navigate to AddressScreen to get the user's address
+                      final address = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddressScreen(),
+                        ),
+                      );
+
+                      if (address != null) {
+                        // Navigate to BookingPreviewScreen after getting the address
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BookingPreviewScreen(
+                              selectedItems: selectedItems,
+                              address: address,
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  : () {
+                      // Show alert dialog if no items are selected
+                      _showAlertDialog(context, 'No recyclable/s added',
+                          'Please add at least one recyclable item before proceeding.');
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[700],
               ),
@@ -158,41 +109,29 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Center(
-        child: Text(
-          title,
-          style: TextStyle(
-            color: Colors.green[700],
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+  // Check if any quantity is greater than zero
+  bool _hasSelectedItems() {
+    return _productQuantities.values.any((notifier) => notifier.value > 0);
   }
 
-  Widget _buildAppBarItem(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: TextButton(
-        onPressed: () {
-          if (title == 'Home') {
-            Navigator.pushNamed(context, '/');
-          } else if (title == 'Book') {
-          } else if (title == 'Pricing') {
-            Navigator.pushNamed(context, '/Pricing');
-          }
-        },
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.black,
-          ),
-        ),
-      ),
+  // Show an alert dialog when no items are selected
+  void _showAlertDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              child: const Text("OK"),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -233,9 +172,10 @@ class _BookingScreenState extends State<BookingScreen> {
                 final productPrice = productData['price'] as double;
                 final productImage = productData['picture'];
 
-                // Initialize quantity for each product if not set
+                // Initialize quantity and price for each product if not set
                 _productQuantities.putIfAbsent(
                     productName, () => ValueNotifier<int>(0));
+                _productPrices.putIfAbsent(productName, () => productPrice);
 
                 return _buildProductCard(
                   context,
@@ -254,6 +194,22 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Center(
+        child: Text(
+          title,
+          style: TextStyle(
+            color: Colors.green[700],
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProductCard(
     BuildContext context,
     String title,
@@ -264,85 +220,84 @@ class _BookingScreenState extends State<BookingScreen> {
     // Controller to manage the input for quantity
     TextEditingController quantityController = TextEditingController();
 
-    // Initialize with the current quantity value
-    quantityController.text = _productQuantities[title]!.value.toString();
+    return ValueListenableBuilder<int>(
+      valueListenable: _productQuantities[title]!,
+      builder: (context, quantity, child) {
+        // Sync the TextField value with the current quantity value
+        quantityController.text = quantity.toString();
 
-    return SizedBox(
-      width: (MediaQuery.of(context).size.width - 48) /
-          2, // Adjust width for two columns
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              Row(
+        return SizedBox(
+          width: (MediaQuery.of(context).size.width - 48) /
+              2, // Adjust for two columns
+          child: Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(10),
-                        bottomLeft: Radius.circular(10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(10),
+                            bottomLeft: Radius.circular(10),
+                          ),
+                          child: Image.network(
+                            imageUrl,
+                            height: 150, // Set height to match the content
+                            fit: BoxFit
+                                .cover, // Cover the entire available space
+                          ),
+                        ),
                       ),
-                      child: Image.network(
-                        imageUrl,
-                        height: 150, // Set height to match the content
-                        fit: BoxFit.cover, // Cover the entire available space
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              description,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
+                      Expanded(
+                        child: Text(
+                          '₱ ${pricePerKg.toStringAsFixed(1)} / kg',
                           style: const TextStyle(
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.black,
                           ),
+                          textAlign: TextAlign.end,
                         ),
-                        const SizedBox(height: 5),
-                        Text(
-                          description,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '₱ ${pricePerKg.toStringAsFixed(1)} / kg',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
                       ),
-                      textAlign: TextAlign.end,
-                    ),
+                    ],
                   ),
-                ],
-              ),
-              Divider(thickness: 1, color: Colors.green[100]),
-              ValueListenableBuilder<int>(
-                valueListenable: _productQuantities[title]!,
-                builder: (context, quantity, child) {
-                  // Update the text field when the quantity changes
-                  quantityController.text = quantity.toString();
-
-                  return Row(
+                  Divider(thickness: 1, color: Colors.green[100]),
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Decrease Quantity Button
                       IconButton(
                         icon: Icon(Icons.remove, color: Colors.green[700]),
                         onPressed: () {
@@ -351,7 +306,8 @@ class _BookingScreenState extends State<BookingScreen> {
                           }
                         },
                       ),
-                      // TextField to input the quantity
+
+                      // Quantity TextField
                       SizedBox(
                         width: 50,
                         height: 40,
@@ -366,20 +322,23 @@ class _BookingScreenState extends State<BookingScreen> {
                             contentPadding: EdgeInsets.zero,
                           ),
                           onChanged: (value) {
-                            // Update the quantity value when the text changes
                             int? newQuantity = int.tryParse(value);
-                            if (newQuantity != null) {
+                            if (newQuantity != null && newQuantity >= 0) {
                               _productQuantities[title]!.value = newQuantity;
                             }
                           },
                         ),
                       ),
+
+                      // Increase Quantity Button
                       IconButton(
                         icon: Icon(Icons.add, color: Colors.green[700]),
                         onPressed: () {
                           _productQuantities[title]!.value += 1;
                         },
                       ),
+
+                      // Profit Display
                       Text(
                         'Estimated Profit',
                         style: TextStyle(
@@ -396,13 +355,13 @@ class _BookingScreenState extends State<BookingScreen> {
                         ),
                       ),
                     ],
-                  );
-                },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
