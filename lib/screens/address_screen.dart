@@ -177,8 +177,7 @@ class _AddressScreenState extends State<AddressScreen> {
                       ),
                       child: GoogleMap(
                         onMapCreated: (controller) {
-                          mapController =
-                              controller; // Assign the map controller
+                          mapController = controller; 
                         },
                         initialCameraPosition: CameraPosition(
                           target: _initialPosition,

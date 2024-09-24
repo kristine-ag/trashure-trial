@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:trashure/address_screen.dart';
-import 'package:trashure/bookpreview_screen.dart';
+import 'package:trashure/screens/address_screen.dart';
+import 'package:trashure/screens/bookpreview_screen.dart';
 import 'package:trashure/components/appbar.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -23,6 +23,9 @@ class _BookingScreenState extends State<BookingScreen> {
 
   // Map to track product prices dynamically
   final Map<String, double> _productPrices = {};
+
+  // Map to track product timestamps dynamically
+  final Map<String, Timestamp> _productTimestamps = {};
 
   @override
   Widget build(BuildContext context) {
@@ -62,17 +65,23 @@ class _BookingScreenState extends State<BookingScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                // Collect selected items, their quantities, and prices
+                // Collect selected items, their quantities, prices, and timestamps
                 Map<String, dynamic> selectedItems = {};
 
                 _productQuantities.forEach((productName, notifier) {
                   if (notifier.value > 0) {
+                    final productPrice =
+                        _productPrices[productName]; // Get the price
+                    final priceTimestamp = _productTimestamps[
+                        productName]; // Get the price timestamp
+
                     selectedItems[productName] = {
                       'quantity': notifier.value,
-                      'price_per_kg':
-                          _productPrices[productName], // Adding price per kg
+                      'price_per_kg': productPrice, // Store the price
                       'total_price': notifier.value *
-                          _productPrices[productName]! // Calculate total price
+                          productPrice!, // Calculate total price
+                      'price_timestamp':
+                          priceTimestamp, // Store the price timestamp
                     };
                   }
                 });
@@ -150,20 +159,43 @@ class _BookingScreenState extends State<BookingScreen> {
                 final productData = productDoc.data() as Map<String, dynamic>;
                 final productName = productData['product_name'];
                 final productDescription = productData['details'];
-                final productPrice = productData['price'] as double;
                 final productImage = productData['picture'];
 
-                // Initialize quantity and price for each product if not set
-                _productQuantities.putIfAbsent(
-                    productName, () => ValueNotifier<int>(0));
-                _productPrices.putIfAbsent(productName, () => productPrice);
+                // Fetch the latest price from the subcollection "prices"
+                return FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('products')
+                      .doc(productDoc.id)
+                      .collection('prices')
+                      .orderBy('time', descending: true)
+                      .limit(1)
+                      .get(),
+                  builder: (context, priceSnapshot) {
+                    if (!priceSnapshot.hasData ||
+                        priceSnapshot.data!.docs.isEmpty) {
+                      return const Text('Price unavailable');
+                    }
 
-                return _buildProductCard(
-                  context,
-                  productName,
-                  productDescription,
-                  productPrice,
-                  productImage,
+                    final priceData = priceSnapshot.data!.docs.first.data()
+                        as Map<String, dynamic>;
+                    final productPrice = priceData['price'] as double;
+                    final priceTimestamp = priceData['time'] as Timestamp;
+
+                    // Initialize quantity and price for each product if not set
+                    _productQuantities.putIfAbsent(
+                        productName, () => ValueNotifier<int>(0));
+                    _productPrices.putIfAbsent(productName, () => productPrice);
+                    _productTimestamps.putIfAbsent(
+                        productName, () => priceTimestamp); // Store timestamp
+
+                    return _buildProductCard(
+                        context,
+                        productName,
+                        productDescription,
+                        productPrice,
+                        productImage,
+                        priceTimestamp);
+                  },
                 );
               }).toList(),
             ),
@@ -177,7 +209,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding:EdgeInsets.fromLTRB(1, 16, 1, 1),
+      padding: const EdgeInsets.fromLTRB(1, 16, 1, 1),
       child: Center(
         child: Text(
           title,
@@ -198,6 +230,7 @@ class _BookingScreenState extends State<BookingScreen> {
     String description,
     double pricePerKg,
     String imageUrl,
+    Timestamp priceTimestamp,
   ) {
     // Controller to manage the input for quantity
     TextEditingController quantityController = TextEditingController();
@@ -222,12 +255,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   Expanded(
                     flex: 3,
                     child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(10),
-                        bottomRight: Radius.circular(10),
-                        topLeft: Radius.circular(10),
-                        bottomLeft: Radius.circular(10),
-                      ),
+                      borderRadius: const BorderRadius.all(Radius.circular(10)),
                       child: Image.network(
                         imageUrl,
                         height: 150, // Set height to match the content

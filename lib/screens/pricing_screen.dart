@@ -64,8 +64,8 @@ class _PricingScreenState extends State<PricingScreen> {
                   'assets/images/banner.jpg',
                 ],
               ),
-              const Spacer(),
-              const CustomFooter()
+              // const Spacer(),
+              // const CustomFooter()
             ],
           ),
         ),

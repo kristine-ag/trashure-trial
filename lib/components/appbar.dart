@@ -23,7 +23,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           style: TextStyle(
             color: Colors.green[700],
             fontWeight: FontWeight.bold,
-            fontSize: 24,
+            fontSize: 30,
           ),
         ),
       ),
@@ -64,11 +64,17 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: Row(
                   children: [
                     const SizedBox(width: 8),
-                    Text(
-                      userName,
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
+                    // Make the username clickable and navigate to the profile screen
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(context, '/Profile'); // Navigate to Profile Screen
+                      },
+                      child: Text(
+                        userName,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     IconButton(
@@ -108,7 +114,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   // This is required to define the preferred size of the app bar
   @override
-  Size get preferredSize => const Size.fromHeight(56);
+  Size get preferredSize => const Size.fromHeight(60);
 
   Widget _buildAppBarItem(BuildContext context, String title) {
     return Padding(

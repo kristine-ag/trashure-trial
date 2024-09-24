@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // For user details
 import 'package:intl/intl.dart'; // For formatting dates
-import 'package:trashure/bookconfirm_screen.dart';
-import 'components/appbar.dart';
+import 'package:trashure/screens/bookconfirm_screen.dart';
+import '../components/appbar.dart';
 
 class BookSchedScreen extends StatefulWidget {
   const BookSchedScreen({Key? key}) : super(key: key);
@@ -55,12 +55,14 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
       'address': address,
     });
 
+    // Loop through the selected items and add each recyclable item, including the timestamp.
     if (selectedItems != null) {
       for (var entry in selectedItems!.entries) {
         await userRef.collection('recyclables').add({
           'type': entry.key,
           'quantity': entry.value['quantity'].toString(),
           'price': entry.value['price_per_kg'].toString(),
+          'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),  // Add timestamp field
         });
       }
     }
@@ -81,6 +83,7 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
     );
   }
 }
+
 
 
   @override

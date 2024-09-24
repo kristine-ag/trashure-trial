@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:trashure/address_screen.dart';
-import 'package:trashure/bookpreview_screen.dart';
+import 'package:trashure/screens/address_screen.dart';
+import 'package:trashure/screens/bookpreview_screen.dart';
 import 'package:trashure/components/appbar.dart';
 
 class BookingScreen extends StatefulWidget {

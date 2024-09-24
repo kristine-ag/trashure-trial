@@ -94,7 +94,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () {
-                      // Button Action
+                      Navigator.pushNamed(context, '/Book');
                     },
                     style: ElevatedButton.styleFrom(
                       foregroundColor: Colors.green, backgroundColor: Colors.white, // text color
@@ -233,14 +233,14 @@ class HomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          padding: const EdgeInsets.symmetric(horizontal: 80.0),
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
               crossAxisSpacing: 20,
-              mainAxisSpacing: 20,
+              mainAxisSpacing: 40,
               childAspectRatio: 1,
             ),
             itemCount: plasticTypes.length,

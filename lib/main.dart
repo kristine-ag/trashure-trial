@@ -3,14 +3,15 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:trashure/address_screen.dart';
-import 'package:trashure/booking_screen.dart';
-import 'package:trashure/booksched_screen.dart';
-import 'package:trashure/pricing_screen.dart';
-import 'firebase_options.dart';
-import 'signup_screen.dart';
-import 'login_screen.dart';
-import 'home_screen.dart';
+import 'package:trashure/screens/address_screen.dart';
+import 'package:trashure/screens/booking_screen.dart';
+import 'package:trashure/screens/booksched_screen.dart';
+import 'package:trashure/screens/pricing_screen.dart';
+import 'package:trashure/screens/profile_screen.dart';
+import 'components/firebase_options.dart';
+import 'registration/signup_screen.dart';
+import 'registration/login_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,8 @@ class MyApp extends StatelessWidget {
         '/Address': (context) => AddressScreen(),
         '/Pricing': (context) => PricingScreen(),
         '/Schedule': (context) => BookSchedScreen(),
+        '/Profile': (context) => ProfileScreen(),
+
       },
     );
   }
