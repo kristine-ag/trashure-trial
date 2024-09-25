@@ -1,3 +1,6 @@
+const String googleMapsApiKey = "AIzaSyD1c6gdPl_vhxfXwcLQ87bQ-FRPL55eGF4";
+
+
 class BookingInfo {
   final String serviceType;
   final String scheduleDate;

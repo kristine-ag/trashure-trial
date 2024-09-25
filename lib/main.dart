@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:trashure/maptrial.dart';
 import 'package:trashure/screens/address_screen.dart';
 import 'package:trashure/screens/booking_screen.dart';
 import 'package:trashure/screens/booksched_screen.dart';
@@ -43,6 +44,8 @@ class MyApp extends StatelessWidget {
         '/Pricing': (context) => PricingScreen(),
         '/Schedule': (context) => BookSchedScreen(),
         '/Profile': (context) => ProfileScreen(),
+        '/map': (context) => GoogleMapPage(),
+
 
       },
     );
