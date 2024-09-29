@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:trashure/components/appbar.dart';
-import 'package:trashure/components/footer.dart';
 
 class PricingScreen extends StatefulWidget {
   const PricingScreen({super.key});

@@ -55,8 +55,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               }
 
               final userData = snapshot.data?.data() as Map<String, dynamic>?;
-              final userName = userData != null && userData.containsKey('name')
-                  ? userData['name']
+              final userName = userData != null && userData.containsKey('firstName')
+                  ? userData['firstName']
                   : 'User';
 
               return Padding(

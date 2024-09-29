@@ -1,11 +1,11 @@
-// ignore_for_file: prefer_const_constructors
-
+import 'dart:convert';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'package:trashure/components/booking_info.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -20,188 +20,80 @@ class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _contactController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
-  String _selectedCategory = 'household';
+  LatLng? _selectedLocation;
+  String? _selectedAddress;
+  final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
 
   Future<void> _signup() async {
     if (_formKey.currentState!.validate()) {
-      await _showContactAddressDialog();
+      if (_selectedAddress == null || _selectedLocation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please select an address using the map.')),
+        );
+      } else {
+        // Check if contact number already exists
+        final contactSnapshot = await _firestore
+            .collection('users')
+            .where('contact', isEqualTo: _contactController.text)
+            .get();
+
+        if (contactSnapshot.docs.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Contact number already exists.')),
+          );
+        } else {
+          await _completeSignup();
+        }
+      }
     }
   }
 
-  Future<void> _showContactAddressDialog() async {
-    final _streetController = TextEditingController();
-    final _cityController = TextEditingController();
-    final _stateController = TextEditingController();
-    final _zipCodeController = TextEditingController();
-    final _countryController = TextEditingController();
-
-    return showDialog<void>(
-      context: context,
-      barrierDismissible:
-          false, // Prevent closing the dialog by tapping outside
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Additional Information'),
-          content: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _contactController,
-                  decoration: InputDecoration(
-                    labelText: 'Contact Number',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your contact number';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16.0),
-                TextFormField(
-                  controller: _streetController,
-                  decoration: InputDecoration(
-                    labelText: 'Street Address',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your street address';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16.0),
-                TextFormField(
-                  controller: _cityController,
-                  decoration: InputDecoration(
-                    labelText: 'City',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your city';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16.0),
-                TextFormField(
-                  controller: _stateController,
-                  decoration: InputDecoration(
-                    labelText: 'State/Province',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your state or province';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16.0),
-                TextFormField(
-                  controller: _zipCodeController,
-                  decoration: InputDecoration(
-                    labelText: 'Zip Code',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your zip code';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 16.0),
-                TextFormField(
-                  controller: _countryController,
-                  decoration: InputDecoration(
-                    labelText: 'Country',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your country';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            ElevatedButton(
-              child: Text('Submit'),
-              onPressed: () async {
-                if (_contactController.text.isNotEmpty &&
-                    _streetController.text.isNotEmpty &&
-                    _cityController.text.isNotEmpty &&
-                    _stateController.text.isNotEmpty &&
-                    _zipCodeController.text.isNotEmpty &&
-                    _countryController.text.isNotEmpty) {
-                  Navigator.of(context).pop();
-
-                  // Combine the address fields into a single string
-                  _addressController.text =
-                      '${_streetController.text}, ${_cityController.text}, ${_stateController.text}, ${_zipCodeController.text}, ${_countryController.text}';
-
-                  await _completeSignup();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please fill in all fields.')),
-                  );
-                }
-              },
-            ),
-          ],
-        );
-      },
+  // Opens map-based address selector
+  Future<void> _openAddressSelector() async {
+    LatLng? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddressSelectionScreen(
+          initialPosition: _initialPosition,
+          googleApiKey: googleMapsApiKey,
+        ),
+      ),
     );
+    if (result != null) {
+      setState(() {
+        _selectedLocation = result;
+        _getAddressFromLatLng(result); // Fetch and store the formatted address
+      });
+    }
+  }
+
+  Future<void> _getAddressFromLatLng(LatLng position) async {
+    final String url =
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final formattedAddress = data['results'][0]['formatted_address'];
+          setState(() {
+            _selectedAddress = formattedAddress;
+            _addressController.text = formattedAddress; // Update address field
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching address: $e');
+    }
   }
 
   Future<void> _completeSignup() async {
     try {
-      // Check for duplicate user
-      QuerySnapshot duplicateCheck = await _firestore
-          .collection('users')
-          .where('contact', isEqualTo: _contactController.text)
-          .get();
-
-      if (duplicateCheck.docs.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text('An account with this contact number already exists.')),
-        );
-        return;
-      }
-
-      duplicateCheck = await _firestore
-          .collection('users')
-          .where('address', isEqualTo: _addressController.text)
-          .get();
-
-      if (duplicateCheck.docs.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('An account with this address already exists.')),
-        );
-        return;
-      }
-
       UserCredential userCredential =
           await _auth.createUserWithEmailAndPassword(
         email: _emailController.text,
@@ -209,86 +101,31 @@ class _SignupScreenState extends State<SignupScreen> {
       );
 
       User? user = userCredential.user;
-
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'email': user.email,
-          'name': _nameController.text,
-          'category': _selectedCategory,
+          'firstName': _firstNameController.text,
+          'lastName': _lastNameController.text,
           'contact': _contactController.text,
-          'address': _addressController.text,
+          'address': _selectedAddress,
+          'location': _selectedLocation != null
+              ? GeoPoint(
+                  _selectedLocation!.latitude, _selectedLocation!.longitude)
+              : null, // Handle if location is not selected
+          'balance': 1,
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Signup Successful!')),
         );
 
-        print('User added to Firestore with UID: ${user.uid}');
-
         Navigator.pushReplacementNamed(context, '/');
-      } else {
-        print('User is null');
       }
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('User is already registered. Log in to continue.')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signup Failed: $e')),
-        );
-      }
-      print('Signup Failed: $e');
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser != null) {
-        final GoogleSignInAuthentication googleAuth =
-            await googleUser.authentication;
-        final AuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-
-        final UserCredential userCredential =
-            await _auth.signInWithCredential(credential);
-
-        User? user = userCredential.user;
-
-        if (user != null) {
-          final userDoc =
-              await _firestore.collection('users').doc(user.uid).get();
-          if (!userDoc.exists) {
-            await _firestore.collection('users').doc(user.uid).set({
-              'uid': user.uid,
-              'email': user.email,
-              'name': googleUser.displayName,
-              'category': _selectedCategory,
-              'contact': _contactController.text,
-              'address': _addressController.text,
-            });
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Google Sign-In Successful!')),
-          );
-
-          Navigator.pushReplacementNamed(context, '/');
-        } else {
-          print('User is null');
-        }
-      }
-    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google Sign-In Failed: $e')),
+        SnackBar(content: Text('Signup Failed: ${e.message}')),
       );
-      print('Google Sign-In Failed: $e');
     }
   }
 
@@ -305,7 +142,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 borderRadius: BorderRadius.circular(8.0),
               ),
               elevation: 4.0,
-              shadowColor: Color.fromRGBO(26, 33, 52, 0.11),
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
                 child: Container(
@@ -368,37 +204,60 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                             SizedBox(height: 16.0),
                             TextFormField(
-                              controller: _nameController,
+                              controller: _firstNameController,
                               decoration: InputDecoration(
-                                labelText: 'Name',
+                                labelText: 'First Name',
                                 border: OutlineInputBorder(),
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please enter your name';
+                                  return 'Please enter your first name';
                                 }
                                 return null;
                               },
                             ),
                             SizedBox(height: 16.0),
-                            DropdownButtonFormField<String>(
-                              value: _selectedCategory,
-                              items: ['household', 'business/organization']
-                                  .map((String category) {
-                                return DropdownMenuItem<String>(
-                                  value: category,
-                                  child: Text(category),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                setState(() {
-                                  _selectedCategory = newValue!;
-                                });
-                              },
+                            TextFormField(
+                              controller: _lastNameController,
                               decoration: InputDecoration(
-                                labelText: 'Category',
+                                labelText: 'Last Name',
                                 border: OutlineInputBorder(),
                               ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your last name';
+                                }
+                                return null;
+                              },
+                            ),
+                            SizedBox(height: 16.0),
+                            ElevatedButton(
+                              onPressed: _openAddressSelector,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal[800],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                minimumSize: Size(double.infinity, 50),
+                              ),
+                              child: Text(
+                                'Select Address on Map',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            SizedBox(height: 16.0),
+                            TextFormField(
+                              controller: _contactController,
+                              decoration: InputDecoration(
+                                labelText: 'Contact Number',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your contact number';
+                                }
+                                return null;
+                              },
                             ),
                             SizedBox(height: 16.0),
                             ElevatedButton(
@@ -415,26 +274,19 @@ class _SignupScreenState extends State<SignupScreen> {
                                 style: TextStyle(color: Colors.white),
                               ),
                             ),
-                            SizedBox(height: 16.0),
-                            Divider(),
-                            SizedBox(height: 16.0),
-                            _buildSocialLoginButton(
-                              'Sign up with Google',
-                              FontAwesomeIcons.google,
-                              _signInWithGoogle,
-                            ),
-                            SizedBox(height: 16.0),
+                            const SizedBox(height: 16.0),
                             TextButton(
                               onPressed: () {
                                 Navigator.pushNamed(context, '/login');
                               },
                               child: Text(
-                                'Already have an account? Log In',
+                                "I already have an account",
                                 style: TextStyle(color: Colors.teal[800]),
                               ),
                             ),
-                            SizedBox(height: 16.0),
-                            Text(
+                            const SizedBox(height: 16.0),
+                            const Divider(),
+                            const Text(
                               'Terms and Conditions · Privacy Policy · CA Privacy Notice',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 12.0),
@@ -452,21 +304,66 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
     );
   }
+}
 
-  Widget _buildSocialLoginButton(
-      String text, IconData icon, VoidCallback onPressed) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: FaIcon(icon, size: 24.0),
-        label: Text(text),
-        style: OutlinedButton.styleFrom(
-          minimumSize: Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
+class AddressSelectionScreen extends StatefulWidget {
+  final LatLng initialPosition;
+  final String googleApiKey;
+
+  const AddressSelectionScreen({
+    required this.initialPosition,
+    required this.googleApiKey,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  _AddressSelectionScreenState createState() => _AddressSelectionScreenState();
+}
+
+class _AddressSelectionScreenState extends State<AddressSelectionScreen> {
+  GoogleMapController? mapController;
+  LatLng? selectedPosition;
+  final Set<Marker> _markers = {};
+
+  void _onMapTap(LatLng position) {
+    setState(() {
+      selectedPosition = position;
+      _markers.clear();
+      _markers.add(Marker(
+        markerId: MarkerId('selected-position'),
+        position: position,
+      ));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Select Address on Map'),
+      ),
+      body: GoogleMap(
+        initialCameraPosition: CameraPosition(
+          target: widget.initialPosition,
+          zoom: 14.0,
         ),
+        markers: _markers,
+        onTap: _onMapTap,
+        onMapCreated: (controller) {
+          mapController = controller;
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: Icon(Icons.check),
+        onPressed: () {
+          if (selectedPosition != null) {
+            Navigator.pop(context, selectedPosition);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Please select a location on the map.')),
+            );
+          }
+        },
       ),
     );
   }

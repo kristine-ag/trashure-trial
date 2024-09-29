@@ -1,10 +1,10 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:trashure/components/appbar.dart';
 
@@ -17,11 +17,10 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  String? _profileImageUrl;
   bool _isUploading = false;
+  String? _profileImageUrl;
 
   @override
   void initState() {
@@ -29,32 +28,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _getUserProfileImage();
   }
 
-  // Future<void> _loadProfileImage() async {
-  //   String uid = _auth.currentUser!.uid;
-  //   DocumentSnapshot userDoc =
-  //       await _firestore.collection('users').doc(uid).get();
-  //   if (userDoc.exists) {
-  //     setState(() {
-  //       _profileImageUrl = userDoc['profileImageUrl'] as String?;
-  //     });
-  //   }
-  // }
-
   Future<void> _getUserProfileImage() async {
     try {
-      // Get current user ID
-      final userId = FirebaseAuth.instance.currentUser?.uid;
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
 
-      // Fetch the user's document from Firestore
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+      final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .get();
 
-      // Extract the profileImageUrl from the document
-      if (userDoc.exists && userDoc['profileImageUrl'] != null) {
+      if (userDoc.exists && userDoc['profileImage'] != null) {
+        String filename = userDoc['profileImage'];
+        String downloadUrl = await _storage
+            .ref()
+            .child('profile_images/$filename')
+            .getDownloadURL();
+
         setState(() {
-          _profileImageUrl = userDoc['profileImageUrl'];
+          _profileImageUrl = downloadUrl;
         });
       }
     } catch (e) {
@@ -63,6 +55,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickAndUploadImage() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.image,
     );
@@ -73,61 +68,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
 
       try {
-        String uid = _auth.currentUser!.uid;
-        Reference storageReference =
-            _storage.ref().child('profile_images/$uid.jpg');
+        String filename = '$userId.jpg';
+        Reference storageReference = _storage.ref().child('profile_images/$filename');
 
-        // Handle file upload based on the platform
+        SettableMetadata metadata = SettableMetadata(
+          contentType: 'image/jpeg',
+        );
+
         if (kIsWeb) {
-          // On web, use `bytes`
           Uint8List? fileBytes = result.files.first.bytes;
           if (fileBytes != null) {
-            UploadTask uploadTask = storageReference.putData(fileBytes);
-            TaskSnapshot snapshot = await uploadTask;
-            String downloadUrl = await snapshot.ref.getDownloadURL();
-
-            // Update Firestore with the image URL
-            await _firestore.collection('users').doc(uid).update({
-              'profileImageUrl': downloadUrl,
-            });
-
-            setState(() {
-              _profileImageUrl = downloadUrl;
-              _isUploading = false;
-            });
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Profile image uploaded successfully!')),
-            );
+            // For web, upload the byte data
+            UploadTask uploadTask = storageReference.putData(fileBytes, metadata);
+            await uploadTask;
           }
         } else {
-          // For non-web platforms, use `File` and `path`
+          // For mobile, upload the file
           File file = File(result.files.single.path!);
-          UploadTask uploadTask = storageReference.putFile(file);
-
-          TaskSnapshot snapshot = await uploadTask;
-          String downloadUrl = await snapshot.ref.getDownloadURL();
-
-          // Update Firestore with the image URL
-          await _firestore.collection('users').doc(uid).update({
-            'profileImageUrl': downloadUrl,
-          });
-
-          setState(() {
-            _profileImageUrl = downloadUrl;
-            _isUploading = false;
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Profile image uploaded successfully!')),
-          );
+          UploadTask uploadTask = storageReference.putFile(file, metadata);
+          await uploadTask;
         }
+
+        // Get the download URL of the image
+        String downloadUrl = await storageReference.getDownloadURL();
+
+        // Update Firestore with the new profile image filename
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'profileImage': filename,
+        });
+
+        // Update the local state to show the new profile image
+        setState(() {
+          _profileImageUrl = downloadUrl;
+          _isUploading = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile image uploaded successfully!')),
+        );
       } catch (e) {
         setState(() {
           _isUploading = false;
         });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to upload profile image: $e')),
         );
@@ -137,29 +120,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      return Scaffold(
+        appBar: CustomAppBar(),
+        body: const Center(child: Text('No user logged in')),
+      );
+    }
+
     return Scaffold(
       appBar: CustomAppBar(),
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          _buildHeaderSection(context),
-          const SizedBox(height: 40),
-          _buildActionButtons(),
-          const SizedBox(height: 40),
-          _buildUserInformation(),
-          const SizedBox(height: 40),
-          Divider(
-            color: Colors.grey[400],
-            thickness: 1,
-            height: 1,
-          ),
-          _buildFooter(context),
-        ],
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(child: Text('No user data found.'));
+          }
+
+          final userDoc = snapshot.data!;
+          String fullName = '${userDoc['firstName'] ?? ''} ${userDoc['lastName'] ?? ''}';
+          String phoneNumber = userDoc['contact'] ?? 'No phone number available';
+          int balance = userDoc['balance'] ?? 0;
+          // List bookingHistory = userDoc['bookingHistory'] ?? [];
+
+          return ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _buildHeaderSection(),
+              const SizedBox(height: 20),
+              _buildProfileImageButton(), // New button to change profile image
+              const SizedBox(height: 40),
+              _buildPersonalInformation(fullName, phoneNumber),
+              const SizedBox(height: 40),
+              _buildAccountInformation(balance),
+              const SizedBox(height: 40),
+              // _buildBookingInformation(bookingHistory),
+              // const SizedBox(height: 40),
+              _buildSecuritySection(),
+              const SizedBox(height: 40),
+              _buildSupportAndFeedback(),
+              const SizedBox(height: 40),
+              Divider(color: Colors.grey[400], thickness: 1, height: 1),
+              _buildLogoutButton(),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildHeaderSection(BuildContext context) {
+  Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
       height: MediaQuery.of(context).size.height * 0.25,
@@ -180,57 +194,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 radius: 50,
                 backgroundImage: NetworkImage(_profileImageUrl!),
               )
-            : CircleAvatar(
+            : const CircleAvatar(
                 radius: 50,
-                child: Icon(Icons.person),
+                child: Icon(Icons.person, size: 50),
               ),
       ),
     );
   }
 
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        ElevatedButton.icon(
-          onPressed: _pickAndUploadImage,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          icon: const Icon(Icons.upload_file),
-          label: const Text(
-            'Upload Profile Image',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 10),
-        ElevatedButton.icon(
-          onPressed: () {
-            // Add sign-out logic here
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.redAccent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          icon: const Icon(Icons.logout),
-          label: const Text(
-            'Log Out',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
+  Widget _buildProfileImageButton() {
+    return Center(
+      child: ElevatedButton(
+        onPressed: _isUploading ? null : _pickAndUploadImage,
+        child: _isUploading
+            ? const CircularProgressIndicator(
+                color: Colors.white,
+              )
+            : const Text('Change Profile Picture'),
+      ),
     );
   }
 
-  Widget _buildUserInformation() {
+  Widget _buildPersonalInformation(String fullName, String phoneNumber) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Personal Information',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Full Name'),
+              subtitle: Text(fullName.isNotEmpty ? fullName : 'No name available'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.email),
+              title: const Text('Email Address'),
+              subtitle: Text(_auth.currentUser!.email ?? 'No email available'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone),
+              title: const Text('Phone Number'),
+              subtitle: Text(phoneNumber),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountInformation(int balance) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       elevation: 3,
@@ -251,9 +277,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 10),
             ListTile(
-              leading: const Icon(Icons.email),
-              title: const Text('Email Address'),
-              subtitle: Text(_auth.currentUser!.email ?? 'No email available'),
+              leading: const Icon(Icons.stars),
+              title: const Text('Points/Rewards Balance'),
+              subtitle: Text('$balance points'),
             ),
           ],
         ),
@@ -261,45 +287,141 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildFooter(BuildContext context) {
-    return Container(
-      color: Colors.grey[200],
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildFooterColumn('Our Scope',
-              ['Sample District 1', 'Sample District 2', 'Sample District 3']),
-          _buildFooterColumn(
-              'Our Partners', ['Lalala Inc.', 'Trash R Us', 'SM Cares']),
-          _buildFooterColumn('About Us', ['Our Story', 'Work with us']),
-          _buildFooterColumn('Contact Us', ['Our Story', 'Work with us']),
-        ],
+  // Widget _buildBookingInformation(List bookingHistory) {
+  //   return Card(
+  //     margin: const EdgeInsets.symmetric(horizontal: 20),
+  //     elevation: 3,
+  //     shape: RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.circular(10),
+  //     ),
+  //     child: Padding(
+  //       padding: const EdgeInsets.all(20),
+  //       child: Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           const Text(
+  //             'Booking Information',
+  //             style: TextStyle(
+  //               fontWeight: FontWeight.bold,
+  //               fontSize: 20,
+  //             ),
+  //           ),
+  //           const SizedBox(height: 10),
+  //           bookingHistory.isNotEmpty
+  //               ? Column(
+  //                   children: bookingHistory.map((booking) {
+  //                     return ListTile(
+  //                       leading: const Icon(Icons.history),
+  //                       title: Text('Booking at ${booking['venue']}'),
+  //                       subtitle: Text(
+  //                           'Date: ${booking['date']}\nStatus: ${booking['status']}'),
+  //                     );
+  //                   }).toList(),
+  //                 )
+  //               : const Text('No bookings available.'),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  Widget _buildSecuritySection() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Security',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.lock),
+              title: const Text('Password Reset'),
+              subtitle: const Text('Tap to reset your password'),
+              onTap: () {
+                // Add password reset logic here
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFooterColumn(String title, List<String> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
+  Widget _buildSupportAndFeedback() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Support & Feedback',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.feedback),
+              title: const Text('Feedback'),
+              subtitle: const Text('Tap to provide feedback'),
+              onTap: () {
+                // Add feedback logic here
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description),
+              title: const Text('Terms & Conditions / Privacy Policy'),
+              subtitle: const Text('Tap to view'),
+              onTap: () {
+                // Add Terms & Conditions or Privacy Policy navigation logic here
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ElevatedButton.icon(
+        onPressed: () {
+          _auth.signOut();
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.redAccent,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
-        const SizedBox(height: 10),
-        for (var item in items)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Text(
-              item,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
-            ),
-          ),
-      ],
+        icon: const Icon(Icons.logout),
+        label: const Text(
+          'Log Out',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 }

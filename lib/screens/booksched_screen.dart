@@ -60,8 +60,8 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
       for (var entry in selectedItems!.entries) {
         await userRef.collection('recyclables').add({
           'type': entry.key,
-          'quantity': entry.value['quantity'].toString(),
-          'price': entry.value['price_per_kg'].toString(),
+          'quantity': entry.value['quantity'],
+          'price': entry.value['price_per_kg'],
           'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),  // Add timestamp field
         });
       }

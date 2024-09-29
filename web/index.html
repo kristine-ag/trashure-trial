@@ -18,6 +18,8 @@
   <script src="https://apis.google.com/js/platform.js" async defer></script>
 
   <script>
+
+    
     // Replace the deprecated window.flutterWebRenderer with engineInitializer
     document.addEventListener("DOMContentLoaded", function () {
       const engineInitializer = window.flutterWebEngine || window.engineInitializer;
@@ -39,22 +41,6 @@
       });
     }
 
-    // Initialize the Google Map
-    var map;
-    function initMap() {
-      map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: -34.397, lng: 150.644 },
-        zoom: 8,
-      });
-
-      // Add a click listener to the map
-      map.addListener('click', function(event) {
-        var lat = event.latLng.lat();
-        var lng = event.latLng.lng();
-        // Call Dart function
-        mapClicked(lat, lng);
-      });
-    }
   </script>
 </head>
 

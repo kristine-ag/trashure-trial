@@ -203,12 +203,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: const Text("Forgot your Password?"),
                             ),
                             const Divider(),
-                            const SizedBox(height: 16.0),
-                            _buildSocialLoginButton(
-                              'Log in with Google',
-                              FontAwesomeIcons.google,
-                              _signInWithGoogle,
-                            ),
+                            // const SizedBox(height: 16.0),
+                            // _buildSocialLoginButton(
+                            //   'Log in with Google',
+                            //   FontAwesomeIcons.google,
+                            //   _signInWithGoogle,
+                            // ),
                             const SizedBox(height: 16.0),
                             TextButton(
                               onPressed: () {
