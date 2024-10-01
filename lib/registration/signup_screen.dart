@@ -94,6 +94,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _completeSignup() async {
     try {
+      // Create user with email and password
       UserCredential userCredential =
           await _auth.createUserWithEmailAndPassword(
         email: _emailController.text,
@@ -101,7 +102,12 @@ class _SignupScreenState extends State<SignupScreen> {
       );
 
       User? user = userCredential.user;
-      if (user != null) {
+
+      // Send email verification
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+
+        // Store the user data in Firestore
         await _firestore.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'email': user.email,
@@ -112,15 +118,20 @@ class _SignupScreenState extends State<SignupScreen> {
           'location': _selectedLocation != null
               ? GeoPoint(
                   _selectedLocation!.latitude, _selectedLocation!.longitude)
-              : null, // Handle if location is not selected
+              : null,
           'balance': 1,
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signup Successful!')),
+          SnackBar(
+              content:
+                  Text('Verification email sent! Please check your inbox.')),
         );
 
-        Navigator.pushReplacementNamed(context, '/');
+        // Redirect user to a verification pending screen or simply sign them out
+        await _auth.signOut();
+
+        Navigator.pushReplacementNamed(context, '/login');
       }
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -20,16 +20,43 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
+        // Sign in the user
+        UserCredential userCredential =
+            await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login Successful!')),
-        );
+        User? user = userCredential.user;
 
-        _redirectToLastRoute();
+        if (user != null && !user.emailVerified) {
+          // Email not verified, show a message and allow to resend verification email
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Please verify your email. Check your inbox or tap to resend.'),
+              action: SnackBarAction(
+                label: 'Resend',
+                onPressed: () async {
+                  await user.sendEmailVerification();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text(
+                            'Verification email sent! Please check your inbox.')),
+                  );
+                },
+              ),
+            ),
+          );
+          await FirebaseAuth.instance.signOut(); // Sign out the user
+        } else {
+          // Email verified, proceed with login
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login Successful!')),
+          );
+
+          _redirectToLastRoute(); // Navigate to the last route or home page
+        }
       } on FirebaseAuthException catch (e) {
         String message;
         switch (e.code) {
@@ -37,7 +64,8 @@ class _LoginScreenState extends State<LoginScreen> {
             message = 'The email address is not valid.';
             break;
           case 'user-disabled':
-            message = 'The user corresponding to the given email has been disabled.';
+            message =
+                'The user corresponding to the given email has been disabled.';
             break;
           case 'user-not-found':
             message = 'No user found for the given email.';
@@ -63,13 +91,15 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
       if (googleUser != null) {
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
         final AuthCredential credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
 
-        final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+        final UserCredential userCredential =
+            await FirebaseAuth.instance.signInWithCredential(credential);
 
         User? user = userCredential.user;
 
@@ -81,7 +111,8 @@ class _LoginScreenState extends State<LoginScreen> {
           _redirectToLastRoute();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Google Sign-In Failed: User is null')),
+            const SnackBar(
+                content: Text('Google Sign-In Failed: User is null')),
           );
         }
       }
@@ -137,7 +168,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: AnimatedTextKit(
                               animatedTexts: [
                                 TypewriterAnimatedText('Welcome to Trashure'),
-                                TypewriterAnimatedText('Log In to Your Account'),
+                                TypewriterAnimatedText(
+                                    'Log In to Your Account'),
                               ],
                               repeatForever: true,
                             ),
@@ -159,7 +191,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (value == null || value.isEmpty) {
                                   return 'Please enter your email';
                                 }
-                                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                    .hasMatch(value)) {
                                   return 'Please enter a valid email address';
                                 }
                                 return null;
@@ -240,7 +273,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildSocialLoginButton(String text, IconData icon, VoidCallback onPressed) {
+  Widget _buildSocialLoginButton(
+      String text, IconData icon, VoidCallback onPressed) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: OutlinedButton.icon(

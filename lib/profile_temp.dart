@@ -1,16 +1,12 @@
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+
 import 'package:trashure/components/appbar.dart';
-import 'package:trashure/components/booking_history.dart';
-import 'package:trashure/components/booking_info.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -23,16 +19,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
+  
+
   bool _isUploading = false;
   String? _profileImageUrl;
-  String? _address;
-  GeoPoint? _geoPoint;
 
   @override
   void initState() {
     super.initState();
     _getUserProfileImage();
-    _getUserAddress();
   }
 
   Future<void> _getUserProfileImage() async {
@@ -61,109 +56,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _getUserAddress() async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return;
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
-
-      if (userDoc.exists) {
-        _geoPoint = userDoc['location'] as GeoPoint;
-        _address = userDoc['address'] as String;
-
-        print("GeoPoint: Latitude = ${_geoPoint?.latitude}, Longitude = ${_geoPoint?.longitude}");
-        print("Address: $_address");
-      }
-    } catch (e) {
-      print('Error fetching address: $e');
-    }
-  }
-
-  Future<void> _getAddressFromLatLng(LatLng position) async {
-    final String url =
-        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
-
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
-          final formattedAddress = data['results'][0]['formatted_address'];
-          setState(() {
-            _address = formattedAddress;
-          });
-        } else {
-          print('No address found');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No address found.')),
-          );
-        }
-      } else {
-        print('Error fetching address');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error fetching address.')),
-        );
-      }
-    } catch (e) {
-      print('Error fetching address: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error fetching address: $e')),
-      );
-    }
-  }
-
-  Future<void> _pickLocationOnMap() async {
-    if (_geoPoint == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No initial location available.')),
-      );
-      return;
-    }
-
-    LatLng? selectedLatLng = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MapScreen(
-          initialLocation: _geoPoint!,
-        ),
-      ),
-    );
-
-    if (selectedLatLng != null) {
-      try {
-        await _getAddressFromLatLng(selectedLatLng);
-
-        final userId = _auth.currentUser?.uid;
-        if (userId == null) return;
-
-        await FirebaseFirestore.instance.collection('users').doc(userId).update({
-          'location': GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude),
-          'address': _address,
-        });
-
-        setState(() {
-          _geoPoint = GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Address updated successfully!')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching address: $e')),
-        );
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No location selected.')),
-      );
-    }
-  }
-
   Future<void> _pickAndUploadImage() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -179,8 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       try {
         String filename = '$userId.jpg';
-        Reference storageReference =
-            _storage.ref().child('profile_images/$filename');
+        Reference storageReference = _storage.ref().child('profile_images/$filename');
 
         SettableMetadata metadata = SettableMetadata(
           contentType: 'image/jpeg',
@@ -190,8 +81,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Uint8List? fileBytes = result.files.first.bytes;
           if (fileBytes != null) {
             // For web, upload the byte data
-            UploadTask uploadTask =
-                storageReference.putData(fileBytes, metadata);
+            UploadTask uploadTask = storageReference.putData(fileBytes, metadata);
             await uploadTask;
           }
         } else {
@@ -205,10 +95,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         String downloadUrl = await storageReference.getDownloadURL();
 
         // Update Firestore with the new profile image filename
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
           'profileImage': filename,
         });
 
@@ -246,10 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: CustomAppBar(),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .snapshots(),
+        stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -260,11 +144,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
 
           final userDoc = snapshot.data!;
-          String fullName =
-              '${userDoc['firstName'] ?? ''} ${userDoc['lastName'] ?? ''}';
-          String phoneNumber =
-              userDoc['contact'] ?? 'No phone number available';
+          String fullName = '${userDoc['firstName'] ?? ''} ${userDoc['lastName'] ?? ''}';
+          String phoneNumber = userDoc['contact'] ?? 'No phone number available';
           int balance = userDoc['balance'] ?? 0;
+          // List bookingHistory = userDoc['bookingHistory'] ?? [];
 
           return ListView(
             padding: EdgeInsets.zero,
@@ -277,6 +160,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 40),
               _buildAccountInformation(balance),
               const SizedBox(height: 40),
+              // _buildBookingInformation(bookingHistory),
+              // const SizedBox(height: 40),
               _buildSecuritySection(),
               const SizedBox(height: 40),
               _buildSupportAndFeedback(),
@@ -355,8 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('Full Name'),
-              subtitle:
-                  Text(fullName.isNotEmpty ? fullName : 'No name available'),
+              subtitle: Text(fullName.isNotEmpty ? fullName : 'No name available'),
             ),
             ListTile(
               leading: const Icon(Icons.email),
@@ -368,23 +252,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Phone Number'),
               subtitle: Text(phoneNumber),
             ),
-            ListTile(
-              leading: const Icon(Icons.location_on),
-              title: const Text('Address'),
-              subtitle: Text(_address ?? 'No address available'),
-            ),
-            ElevatedButton.icon(
-              onPressed: _pickLocationOnMap,
-              icon: const Icon(Icons.map),
-              label: const Text('Edit Address'),
-            ),
           ],
         ),
       ),
     );
   }
 
-    Widget _buildAccountInformation(int balance) {
+  Widget _buildAccountInformation(int balance) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       elevation: 3,
@@ -409,23 +283,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Points/Rewards Balance'),
               subtitle: Text('$balance points'),
             ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const BookingHistoryScreen()),
-                );
-              },
-              icon: const Icon(Icons.history),
-              label: const Text('View Booking History'),
-            ),
           ],
         ),
       ),
     );
   }
 
+  // Widget _buildBookingInformation(List bookingHistory) {
+  //   return Card(
+  //     margin: const EdgeInsets.symmetric(horizontal: 20),
+  //     elevation: 3,
+  //     shape: RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.circular(10),
+  //     ),
+  //     child: Padding(
+  //       padding: const EdgeInsets.all(20),
+  //       child: Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           const Text(
+  //             'Booking Information',
+  //             style: TextStyle(
+  //               fontWeight: FontWeight.bold,
+  //               fontSize: 20,
+  //             ),
+  //           ),
+  //           const SizedBox(height: 10),
+  //           bookingHistory.isNotEmpty
+  //               ? Column(
+  //                   children: bookingHistory.map((booking) {
+  //                     return ListTile(
+  //                       leading: const Icon(Icons.history),
+  //                       title: Text('Booking at ${booking['venue']}'),
+  //                       subtitle: Text(
+  //                           'Date: ${booking['date']}\nStatus: ${booking['status']}'),
+  //                     );
+  //                   }).toList(),
+  //                 )
+  //               : const Text('No bookings available.'),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   Widget _buildSecuritySection() {
     return Card(
@@ -523,59 +423,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'Log Out',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-      ),
-    );
-  }
-}
-
-class MapScreen extends StatefulWidget {
-  final GeoPoint initialLocation;
-
-  const MapScreen({Key? key, required this.initialLocation}) : super(key: key);
-
-  @override
-  _MapScreenState createState() => _MapScreenState();
-}
-
-class _MapScreenState extends State<MapScreen> {
-  LatLng? _selectedLatLng;
-  GoogleMapController? _mapController;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Select Location'),
-        actions: [
-          if (_selectedLatLng != null)
-            IconButton(
-              icon: const Icon(Icons.check),
-              onPressed: () {
-                Navigator.pop(context, _selectedLatLng); // Return the selected location
-              },
-            )
-        ],
-      ),
-      body: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: LatLng(widget.initialLocation.latitude, widget.initialLocation.longitude),
-          zoom: 16,
-        ),
-        onMapCreated: (controller) => _mapController = controller,
-        onTap: (latLng) {
-          // Update the selectedLatLng when the user taps on the map
-          setState(() {
-            _selectedLatLng = latLng;
-          });
-        },
-        markers: _selectedLatLng != null
-            ? {
-                Marker(
-                  markerId: const MarkerId('selected-location'),
-                  position: _selectedLatLng!,
-                )
-              }
-            : {},
       ),
     );
   }

@@ -27,6 +27,12 @@ class _BookingScreenState extends State<BookingScreen> {
   // Map to track product timestamps dynamically
   final Map<String, Timestamp> _productTimestamps = {};
 
+  // Map to track product descriptions dynamically
+  final Map<String, String> _productDescriptions = {};
+
+// Map to track product images dynamically
+  final Map<String, String> _productImages = {};
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -65,23 +71,30 @@ class _BookingScreenState extends State<BookingScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                // Collect selected items, their quantities, prices, and timestamps
+                // Collect selected items, their quantities, prices, timestamps, and other details
                 Map<String, dynamic> selectedItems = {};
 
                 _productQuantities.forEach((productName, notifier) {
                   if (notifier.value > 0) {
                     final productPrice =
                         _productPrices[productName]; // Get the price
-                    final priceTimestamp = _productTimestamps[
-                        productName]; // Get the price timestamp
+                    final priceTimestamp =
+                        _productTimestamps[productName]; // Get the timestamp
+
+                    // Access the product description and image from the stored maps
+                    final productDescription =
+                        _productDescriptions[productName];
+                    final productImage = _productImages[productName];
 
                     selectedItems[productName] = {
-                      'quantity': notifier.value,
+                      'weight': notifier.value,
                       'price_per_kg': productPrice, // Store the price
                       'total_price': notifier.value *
                           productPrice!, // Calculate total price
-                      'price_timestamp':
-                          priceTimestamp, // Store the price timestamp
+                      'price_timestamp': priceTimestamp, // Store the timestamp
+                      'description':
+                          productDescription, // Store product description
+                      'image': productImage, // Store product image
                     };
                   }
                 });
@@ -157,7 +170,7 @@ class _BookingScreenState extends State<BookingScreen> {
               runSpacing: 16.0,
               children: visibleProducts.map((productDoc) {
                 final productData = productDoc.data() as Map<String, dynamic>;
-                final productName = productData['product_name'];
+                final productName = productData['product_name'].toUpperCase();
                 final productDescription = productData['details'];
                 final productImage = productData['picture'];
 
@@ -181,12 +194,17 @@ class _BookingScreenState extends State<BookingScreen> {
                     final productPrice = priceData['price'] as double;
                     final priceTimestamp = priceData['time'] as Timestamp;
 
-                    // Initialize quantity and price for each product if not set
+                    // Initialize weight and price for each product if not set
                     _productQuantities.putIfAbsent(
                         productName, () => ValueNotifier<int>(0));
                     _productPrices.putIfAbsent(productName, () => productPrice);
                     _productTimestamps.putIfAbsent(
-                        productName, () => priceTimestamp); // Store timestamp
+                        productName, () => priceTimestamp);
+
+                    // Store product descriptions and images for later use
+                    _productDescriptions.putIfAbsent(
+                        productName, () => productDescription);
+                    _productImages.putIfAbsent(productName, () => productImage);
 
                     return _buildProductCard(
                         context,
@@ -232,11 +250,11 @@ class _BookingScreenState extends State<BookingScreen> {
     String imageUrl,
     Timestamp priceTimestamp,
   ) {
-    // Controller to manage the input for quantity
-    TextEditingController quantityController = TextEditingController();
+    // Controller to manage the input for weight
+    TextEditingController weightController = TextEditingController();
 
-    // Initialize with the current quantity value
-    quantityController.text = _productQuantities[title]!.value.toString();
+    // Initialize with the current weight value
+    weightController.text = _productQuantities[title]!.value.toString();
 
     return SizedBox(
       width: (MediaQuery.of(context).size.width - 48) /
@@ -304,9 +322,9 @@ class _BookingScreenState extends State<BookingScreen> {
               Divider(thickness: 1, color: Colors.green[100]),
               ValueListenableBuilder<int>(
                 valueListenable: _productQuantities[title]!,
-                builder: (context, quantity, child) {
-                  // Update the text field when the quantity changes
-                  quantityController.text = quantity.toString();
+                builder: (context, weight, child) {
+                  // Update the text field when the weight changes
+                  weightController.text = weight.toString();
 
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -314,17 +332,17 @@ class _BookingScreenState extends State<BookingScreen> {
                       IconButton(
                         icon: Icon(Icons.remove, color: Colors.green[700]),
                         onPressed: () {
-                          if (quantity > 0) {
+                          if (weight > 0) {
                             _productQuantities[title]!.value -= 1;
                           }
                         },
                       ),
-                      // TextField to input the quantity
+                      // TextField to input the weight
                       SizedBox(
                         width: 50,
                         height: 40,
                         child: TextField(
-                          controller: quantityController,
+                          controller: weightController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
@@ -334,10 +352,10 @@ class _BookingScreenState extends State<BookingScreen> {
                             contentPadding: EdgeInsets.zero,
                           ),
                           onChanged: (value) {
-                            // Update the quantity value when the text changes
-                            int? newQuantity = int.tryParse(value);
-                            if (newQuantity != null) {
-                              _productQuantities[title]!.value = newQuantity;
+                            // Update the weight value when the text changes
+                            int? newWeight = int.tryParse(value);
+                            if (newWeight != null) {
+                              _productQuantities[title]!.value = newWeight;
                             }
                           },
                         ),
@@ -356,7 +374,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         ),
                       ),
                       Text(
-                        '₱ ${(pricePerKg * quantity).toStringAsFixed(1)}',
+                        '₱ ${(pricePerKg * weight).toStringAsFixed(1)}',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

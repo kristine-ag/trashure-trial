@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart'; // For address handling
 import 'package:geolocator/geolocator.dart'; // For user location
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore package
 import 'package:http/http.dart' as http;
 import 'package:trashure/components/appbar.dart'; // For environment variables
 
@@ -29,7 +30,10 @@ class _AddressScreenState extends State<AddressScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async => await _getUserLocation());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _fetchAddressFromFirestore(); // Fetch address and location from Firestore
+      await _getUserLocation();
+    });
   }
 
   @override
@@ -37,6 +41,35 @@ class _AddressScreenState extends State<AddressScreen> {
     _defaultAddressController.dispose();
     _landmarkController.dispose();
     super.dispose();
+  }
+
+  // Fetch address and location from Firestore
+  Future<void> _fetchAddressFromFirestore() async {
+    if (user != null) {
+      try {
+        // Assuming collection name is 'users' and document is user.uid
+        DocumentSnapshot userData = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
+
+        if (userData.exists) {
+          String fetchedAddress = userData.get('address') ?? '';
+          GeoPoint fetchedLocation = userData.get('location') ?? GeoPoint(7.0731, 125.6122);
+
+          LatLng fetchedLatLng = LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
+
+          setState(() {
+            currentAddress = fetchedAddress;
+            _defaultAddressController.text = fetchedAddress;
+            currentPosition = fetchedLatLng;
+          });
+
+          // Update the map
+          mapController?.animateCamera(CameraUpdate.newLatLng(fetchedLatLng));
+          _addMarker(fetchedLatLng, fetchedAddress);
+        }
+      } catch (e) {
+        print('Error fetching address and location from Firestore: $e');
+      }
+    }
   }
 
   // Fetch the current user's location
@@ -65,19 +98,21 @@ class _AddressScreenState extends State<AddressScreen> {
       }
     }
 
-    // Get the current position
-    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    // Get the current position if there's no stored location
+    if (currentPosition == null) {
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
 
-    setState(() {
-      currentPosition = LatLng(position.latitude, position.longitude);
-    });
+      setState(() {
+        currentPosition = LatLng(position.latitude, position.longitude);
+      });
 
-    // Fetch the address for the current location
-    await _getAddressFromLatLng(currentPosition!);
+      // Fetch the address for the current location
+      await _getAddressFromLatLng(currentPosition!);
 
-    // Move the map camera to the current position
-    mapController?.animateCamera(CameraUpdate.newLatLng(currentPosition!));
-    _addMarker(currentPosition!, currentAddress!);
+      // Move the map camera to the current position
+      mapController?.animateCamera(CameraUpdate.newLatLng(currentPosition!));
+      _addMarker(currentPosition!, currentAddress!);
+    }
   }
 
   // Method to get the address from LatLng using geocoding

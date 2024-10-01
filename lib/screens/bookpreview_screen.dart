@@ -17,13 +17,13 @@ class BookingPreviewScreen extends StatelessWidget {
     double totalWeight =
         selectedItems.entries.fold(0, (previousValue, element) {
       // Use null-aware operators to safely handle null values
-      double itemWeight = (element.value['quantity'] ?? 0) *
-          1.0; // If quantity is null, treat it as 0
+      double itemWeight = (element.value['weight'] ?? 0) *
+          1.0; // If weight is null, treat it as 0
       return previousValue + itemWeight;
     });
 
     double totalPrice = selectedItems.entries.fold(0, (previousValue, element) {
-      double itemPrice = (element.value['quantity'] ?? 0) *
+      double itemPrice = (element.value['weight'] ?? 0) *
           (element.value['price_per_kg'] ?? 0); // Handle null price
       return previousValue + itemPrice;
     });
@@ -185,11 +185,14 @@ class BookingPreviewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             ...selectedItems.entries.map((entry) {
-              double itemQuantity =
-                  entry.value['quantity'] ?? 0; // Handle null quantity
+              double itemWeight =
+                  entry.value['weight'] ?? 0; // Handle null weight
               double pricePerKg =
                   entry.value['price_per_kg'] ?? 0; // Handle null price
-              double totalPriceForItem = itemQuantity * pricePerKg;
+              double totalPriceForItem = itemWeight * pricePerKg;
+              String description = entry.value['description'] ??
+                  'No description available'; // Handle null description
+
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Row(
@@ -206,7 +209,7 @@ class BookingPreviewScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Polyethylene Terephthalate', // Replace with real description if needed
+                          description,
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w400,
@@ -219,7 +222,7 @@ class BookingPreviewScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '${itemQuantity} kg/s',
+                          '${itemWeight} kg/s',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,

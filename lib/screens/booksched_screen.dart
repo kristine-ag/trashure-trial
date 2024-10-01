@@ -16,14 +16,16 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
   String? selectedBookingId;
   String? selectedSchedule;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  Map<String, dynamic>? selectedItems;  // To hold recyclables passed from BookingPreviewScreen
-  String? address;  // To hold address passed from BookingPreviewScreen
+  Map<String, dynamic>?
+      selectedItems; // To hold recyclables passed from BookingPreviewScreen
+  String? address; // To hold address passed from BookingPreviewScreen
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Get the arguments passed from BookingPreviewScreen
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     if (args != null) {
       selectedItems = args['selectedItems'];
       address = args['address'];
@@ -35,56 +37,103 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
     return FirebaseFirestore.instance.collection('bookings').snapshots();
   }
 
+  // Fetch user's contact from Firestore
+  Future<String?> fetchUserContact(String uid) async {
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      return userDoc.data()?['contact'] as String?;
+    }
+    return null;
+  }
+
   // Function to handle booking submission
   Future<void> submitBooking(String bookingId) async {
-  try {
-    final User? user = _auth.currentUser;
-    if (user == null) {
-      throw Exception("User not logged in.");
-    }
-
-    final uid = user.uid;
-    final email = user.email;
-
-    final bookingRef = FirebaseFirestore.instance.collection('bookings').doc(bookingId);
-
-    final userRef = bookingRef.collection('users').doc(uid);
-    await userRef.set({
-      'uid': uid,
-      'email': email,
-      'address': address,
-    });
-
-    // Loop through the selected items and add each recyclable item, including the timestamp.
-    if (selectedItems != null) {
-      for (var entry in selectedItems!.entries) {
-        await userRef.collection('recyclables').add({
-          'type': entry.key,
-          'quantity': entry.value['quantity'],
-          'price': entry.value['price_per_kg'],
-          'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),  // Add timestamp field
-        });
+    try {
+      final User? user = _auth.currentUser;
+      if (user == null) {
+        throw Exception("User not logged in.");
       }
+
+      final uid = user.uid;
+
+      // Fetch user data from Firestore (excluding balance)
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        throw Exception("User data not found.");
+      }
+      final userData = userDoc.data()!;
+
+      // Remove 'balance' field if it exists
+      final filteredUserData = Map<String, dynamic>.from(userData);
+      filteredUserData.remove('balance');
+
+      final bookingRef =
+          FirebaseFirestore.instance.collection('bookings').doc(bookingId);
+      final userRef = bookingRef.collection('users').doc(uid);
+
+      // Start a batch to perform multiple writes
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+
+      // Add the user data to the sub-collection (excluding 'balance')
+      batch.set(userRef, filteredUserData);
+
+      // Calculate total_price for the user
+      double totalUserPrice = 0;
+
+      // Loop through the selected items and add each recyclable item, including the calculated item_price
+      if (selectedItems != null) {
+        for (var entry in selectedItems!.entries) {
+          double weight = entry.value['weight'];
+          double pricePerKg = entry.value['price_per_kg'];
+          double itemPrice = weight * pricePerKg; // Calculate item price
+          totalUserPrice += itemPrice; // Add to user's total price
+
+          // Add recyclables to user's sub-collection
+          batch.set(userRef.collection('recyclables').doc(), {
+            'type': entry.key,
+            'weight': weight,
+            'price': pricePerKg,
+            'item_price': itemPrice, // Add item_price field
+            'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),
+          });
+        }
+
+        // Add total_price to the user document
+        batch.update(userRef, {'total_price': totalUserPrice});
+      }
+
+      // Commit the batch
+      await batch.commit();
+
+      // Now, calculate the overall price for the booking by summing all users' total prices
+      final usersSnapshot = await bookingRef.collection('users').get();
+      double overallPrice = 0;
+      for (var userDoc in usersSnapshot.docs) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        overallPrice += userData['total_price'] ?? 0;
+      }
+
+      // Update the overall_price field in the bookings document
+      await bookingRef.update({'overall_price': overallPrice});
+
+      // Show a confirmation message and navigate to BookingConfirmedScreen
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking confirmed!')),
+      );
+
+      // Navigate to Booking Confirmed Screen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const BookingConfirmedScreen()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
-
-    // Show a confirmation message and navigate to BookingConfirmedScreen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Booking confirmed!')),
-    );
-
-    // Navigate to Booking Confirmed Screen
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const BookingConfirmedScreen()),
-    );
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: ${e.toString()}')),
-    );
   }
-}
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +188,6 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-
                         Column(
                           children: bookings.map((bookingDoc) {
                             final bookingData =
@@ -204,9 +252,7 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          color: isSelected
-              ? const Color(0xFF8DD3BB)
-              : Colors.white,
+          color: isSelected ? const Color(0xFF8DD3BB) : Colors.white,
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Row(
@@ -267,7 +313,8 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green[700],
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
         ),
         child: const Text(
@@ -302,7 +349,8 @@ class _BookSchedScreenState extends State<BookSchedScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildFooterColumn('Our Scope', ['District 1', 'District 2', 'District 3']),
+          _buildFooterColumn(
+              'Our Scope', ['District 1', 'District 2', 'District 3']),
           _buildFooterColumn('Our Partners', ['Partner A', 'Partner B']),
           _buildFooterColumn('About Us', ['Story', 'Work with us']),
           _buildFooterColumn('Contact Us', ['Story', 'Work with us']),
