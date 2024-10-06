@@ -3,10 +3,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:trashure/maptrial.dart';
-import 'package:trashure/screens/address_screen.dart';
 import 'package:trashure/screens/booking_screen.dart';
-import 'package:trashure/screens/booksched_screen.dart';
 import 'package:trashure/screens/pricing_screen.dart';
 import 'package:trashure/screens/profile_screen.dart';
 import 'components/firebase_options.dart';
@@ -40,11 +37,8 @@ class MyApp extends StatelessWidget {
         '/signup': (context) => SignupScreen(),
         '/login': (context) => LoginScreen(),
         '/Book': (context) => BookingScreen(),
-        '/Address': (context) => AddressScreen(),
         '/Pricing': (context) => PricingScreen(),
-        '/Schedule': (context) => BookSchedScreen(),
         '/Profile': (context) => ProfileScreen(),
-        '/map': (context) => GoogleMapPage(),
 
 
       },

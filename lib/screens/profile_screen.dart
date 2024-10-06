@@ -10,7 +10,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:trashure/components/appbar.dart';
 import 'package:trashure/components/booking_history.dart';
-import 'package:trashure/components/booking_info.dart';
+import 'package:trashure/components/firebase_options.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -418,7 +418,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
               icon: const Icon(Icons.history),
-              label: const Text('View Booking History'),
+              label: const Text('View Booking/s and Transaction History'),
             ),
           ],
         ),

@@ -1,18 +1,23 @@
+import 'dart:convert'; // For jsonDecode
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:trashure/screens/address_screen.dart';
-import 'package:trashure/screens/bookpreview_screen.dart';
 import 'package:trashure/components/appbar.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geocoding/geocoding.dart'; // For address handling
+import 'package:geolocator/geolocator.dart'; // For user location
+import 'package:http/http.dart' as http;
+import 'package:trashure/screens/bookpreview_screen.dart'; // Import your BookingPreviewScreen
 
 class BookingScreen extends StatefulWidget {
-  const BookingScreen({super.key});
+  const BookingScreen({Key? key}) : super(key: key);
 
   @override
   _BookingScreenState createState() => _BookingScreenState();
 }
 
 class _BookingScreenState extends State<BookingScreen> {
+  // Variables for product selection
   bool _showAllPlastics = false;
   bool _showAllMetals = false;
 
@@ -30,24 +35,209 @@ class _BookingScreenState extends State<BookingScreen> {
   // Map to track product descriptions dynamically
   final Map<String, String> _productDescriptions = {};
 
-// Map to track product images dynamically
+  // Map to track product images dynamically
   final Map<String, String> _productImages = {};
+
+  // Variables for address confirmation
+  GoogleMapController? mapController;
+  final Set<Marker> _markers = {};
+  LatLng? currentPosition;
+  String? currentAddress;
+  final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
+  final TextEditingController _defaultAddressController = TextEditingController();
+  final TextEditingController _landmarkController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController(); // Controller for phone number
+
+  final String googleApiKey = 'YOUR_GOOGLE_API_KEY'; // Replace with your Google API Key
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _fetchAddressFromFirestore(); // Fetch address and location from Firestore
+      await _getUserLocation();
+    });
+  }
+
+  @override
+  void dispose() {
+    // Dispose product selection controllers if any
+    _defaultAddressController.dispose();
+    _landmarkController.dispose();
+    _contactController.dispose(); // Dispose the contact controller
+    super.dispose();
+  }
+
+  // Fetch address, contact, and location from Firestore
+  Future<void> _fetchAddressFromFirestore() async {
+    if (user != null) {
+      try {
+        DocumentSnapshot userData =
+            await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
+
+        if (userData.exists) {
+          String fetchedAddress = userData.get('address') ?? '';
+          String fetchedContact = userData.get('contact') ?? ''; // Fetch the contact field
+          GeoPoint fetchedLocation =
+              userData.get('location') ?? GeoPoint(7.0731, 125.6122);
+
+          LatLng fetchedLatLng =
+              LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
+
+          setState(() {
+            currentAddress = fetchedAddress;
+            _defaultAddressController.text = fetchedAddress;
+            _contactController.text = fetchedContact; // Set the contact controller
+            currentPosition = fetchedLatLng;
+          });
+
+          // Update the map
+          mapController?.animateCamera(CameraUpdate.newLatLng(fetchedLatLng));
+          _addMarker(fetchedLatLng, fetchedAddress);
+        }
+      } catch (e) {
+        print('Error fetching address and location from Firestore: $e');
+      }
+    }
+  }
+
+  // Fetch the current user's location
+  Future<void> _getUserLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // Check if location services are enabled.
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() {
+        currentAddress = 'Location services are disabled.';
+      });
+      return;
+    }
+
+    // Request location permissions
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        setState(() {
+          currentAddress = 'Location permissions are denied.';
+        });
+        return;
+      }
+    }
+
+    // Get the current position if there's no stored location
+    if (currentPosition == null) {
+      Position position =
+          await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+
+      setState(() {
+        currentPosition = LatLng(position.latitude, position.longitude);
+      });
+
+      // Fetch the address for the current location
+      await _getAddressFromLatLng(currentPosition!);
+
+      // Move the map camera to the current position
+      mapController?.animateCamera(CameraUpdate.newLatLng(currentPosition!));
+      _addMarker(currentPosition!, currentAddress!);
+    }
+  }
+
+  // Method to get the address from LatLng using geocoding
+  Future<void> _getAddressFromLatLng(LatLng position) async {
+    final String url =
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleApiKey';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final formattedAddress = data['results'][0]['formatted_address'];
+          setState(() {
+            currentAddress = formattedAddress;
+            _defaultAddressController.text =
+                formattedAddress; // Set the fetched address in the TextField
+          });
+        } else {
+          setState(() {
+            currentAddress = 'No address found';
+            _defaultAddressController.text = 'No address found';
+          });
+        }
+      } else {
+        setState(() {
+          currentAddress = 'Error fetching address: ${response.statusCode}';
+          _defaultAddressController.text = 'Error fetching address';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        currentAddress = 'Error fetching address: $e';
+        _defaultAddressController.text = 'Error fetching address';
+      });
+    }
+  }
+
+  // Method to get LatLng from an address
+  Future<void> _getLatLngFromAddress(String address) async {
+    try {
+      List<Location> locations = await locationFromAddress(address);
+      if (locations.isNotEmpty) {
+        final location = locations[0];
+        final latLng = LatLng(location.latitude, location.longitude);
+
+        mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
+
+        setState(() {
+          _addMarker(latLng, address);
+          currentPosition = latLng; // Update currentPosition
+        });
+      }
+    } catch (e) {
+      print('Error retrieving location: $e');
+    }
+  }
+
+  // Add a marker on the map
+  void _addMarker(LatLng position, String address) {
+    setState(() {
+      _markers.clear(); // Clear previous markers
+      _markers.add(Marker(
+        markerId: MarkerId(position.toString()),
+        position: position,
+        infoWindow: InfoWindow(
+          title: 'Selected Location',
+          snippet: address,
+        ),
+      ));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (user == null) {
+      return _buildLoginPrompt(context);
+    }
+
     return Scaffold(
       appBar: CustomAppBar(),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildSectionTitle('PLASTICS'),
+            // Product Selection Section
+            _buildSectionTitle('SELECT PRODUCTS'),
             const SizedBox(height: 10),
             Container(
               height: 4,
               width: 400,
               color: Colors.green[700],
             ),
+            const SizedBox(height: 10),
+            _buildSectionTitle('PLASTICS'),
             const SizedBox(height: 10),
             _buildProductsSection(context, 'plastics', _showAllPlastics, () {
               setState(() {
@@ -57,78 +247,95 @@ class _BookingScreenState extends State<BookingScreen> {
             const SizedBox(height: 20),
             _buildSectionTitle('METALS'),
             const SizedBox(height: 10),
-            Container(
-              height: 4,
-              width: 400,
-              color: Colors.green[700],
-            ),
-            const SizedBox(height: 10),
             _buildProductsSection(context, 'metals', _showAllMetals, () {
               setState(() {
                 _showAllMetals = !_showAllMetals;
               });
             }),
             const SizedBox(height: 20),
+
+            // Address Confirmation Section
+            _buildSectionTitle('CONFIRM YOUR ADDRESS'),
+            const SizedBox(height: 10),
+            Container(
+              height: 4,
+              width: 400,
+              color: Colors.green[700],
+            ),
+            const SizedBox(height: 20),
+            _buildAddressSection(context),
+            const SizedBox(height: 20),
+            // Next Button
             ElevatedButton(
               onPressed: () async {
-                // Collect selected items, their quantities, prices, timestamps, and other details
+                // Collect selected items
                 Map<String, dynamic> selectedItems = {};
 
                 _productQuantities.forEach((productName, notifier) {
                   if (notifier.value > 0) {
-                    final productPrice =
-                        _productPrices[productName]; // Get the price
-                    final priceTimestamp =
-                        _productTimestamps[productName]; // Get the timestamp
-
-                    // Access the product description and image from the stored maps
-                    final productDescription =
-                        _productDescriptions[productName];
+                    final productPrice = _productPrices[productName];
+                    final priceTimestamp = _productTimestamps[productName];
+                    final productDescription = _productDescriptions[productName];
                     final productImage = _productImages[productName];
 
                     selectedItems[productName] = {
                       'weight': notifier.value,
-                      'price_per_kg': productPrice, // Store the price
-                      'total_price': notifier.value *
-                          productPrice!, // Calculate total price
-                      'price_timestamp': priceTimestamp, // Store the timestamp
-                      'description':
-                          productDescription, // Store product description
-                      'image': productImage, // Store product image
+                      'price_per_kg': productPrice,
+                      'total_price': notifier.value * productPrice!,
+                      'price_timestamp': priceTimestamp,
+                      'description': productDescription,
+                      'image': productImage,
                     };
                   }
                 });
 
-                // Navigate to AddressScreen to get the user's address
-                final address = await Navigator.push(
+                if (selectedItems.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select at least one item.')),
+                  );
+                  return;
+                }
+
+                final address = _defaultAddressController.text;
+                final landmark = _landmarkController.text;
+                final contact = _contactController.text;
+                final fullAddress = '$address, Landmark: $landmark';
+
+                // Optionally, update Firestore with the new data
+                if (user != null) {
+                  try {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user!.uid)
+                        .update({
+                      'address': address,
+                      'landmark': landmark,
+                      'contact': contact,
+                      'location': GeoPoint(currentPosition?.latitude ?? 0.0,
+                          currentPosition?.longitude ?? 0.0),
+                    });
+                  } catch (e) {
+                    print('Error updating Firestore: $e');
+                  }
+                }
+
+                // Navigate to BookingPreviewScreen
+                Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const AddressScreen(),
+                    builder: (context) => BookingPreviewScreen(
+                      selectedItems: selectedItems,
+                      address: fullAddress,
+                      contact: contact,
+                    ),
                   ),
                 );
-
-                if (address != null) {
-                  // Navigate to BookingPreviewScreen after getting the address
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => BookingPreviewScreen(
-                        selectedItems: selectedItems,
-                        address: address,
-                      ),
-                    ),
-                  );
-                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[700],
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
-              child: const Text(
-                'Next',
-                style: TextStyle(
-                  color: Color.fromARGB(255, 255, 255, 255),
-                ),
-              ),
+              child: const Text('Next', style: TextStyle(color: Colors.white)),
             ),
             const SizedBox(height: 20),
             _buildFooter(context),
@@ -138,8 +345,108 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  Widget _buildProductsSection(BuildContext context, String category,
-      bool showAll, VoidCallback toggleShowAll) {
+  // Widget to build the address confirmation section
+  Widget _buildAddressSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Default Address',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _defaultAddressController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter default address',
+                    ),
+                    onSubmitted: (value) {
+                      _getLatLngFromAddress(value); // Fetch LatLng from address
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'House no., Landmark, etc.',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _landmarkController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter landmark or house no.',
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Phone Number',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _contactController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter phone number',
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 4,
+            child: Container(
+              height: 400,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.green, width: 2),
+              ),
+              child: GoogleMap(
+                onMapCreated: (controller) {
+                  mapController = controller;
+                },
+                initialCameraPosition: CameraPosition(
+                  target: currentPosition ?? _initialPosition,
+                  zoom: 15,
+                ),
+                markers: _markers,
+                onTap: (LatLng position) {
+                  _addMarker(position, '${position.latitude}, ${position.longitude}');
+                  _getAddressFromLatLng(
+                      position); // Fetch address from tapped location and update the TextField
+                  currentPosition = position; // Update currentPosition
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // The rest of your BookingScreen code (product selection methods)
+  Widget _buildProductsSection(BuildContext context, String category, bool showAll,
+      VoidCallback toggleShowAll) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('products')
@@ -222,23 +529,6 @@ class _BookingScreenState extends State<BookingScreen> {
           ],
         );
       },
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(1, 16, 1, 1),
-      child: Center(
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.green[700],
-            letterSpacing: 1.5,
-          ),
-        ),
-      ),
     );
   }
 
@@ -366,26 +656,48 @@ class _BookingScreenState extends State<BookingScreen> {
                           _productQuantities[title]!.value += 1;
                         },
                       ),
-                      Text(
-                        'Estimated Profit',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      Text(
-                        '₱ ${(pricePerKg * weight).toStringAsFixed(1)}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Estimated Profit',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          Text(
+                            '₱ ${(pricePerKg * weight).toStringAsFixed(1)}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   );
                 },
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(1, 16, 1, 1),
+      child: Center(
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.green[700],
+            letterSpacing: 1.5,
           ),
         ),
       ),
@@ -401,6 +713,46 @@ class _BookingScreenState extends State<BookingScreen> {
         child: Text(
           showAll ? lessText : moreText,
           style: TextStyle(color: Colors.green[700]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginPrompt(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'Trashure - Login Required',
+          style: TextStyle(
+            color: Colors.green[700],
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
+        ),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'You need to be logged in to proceed.',
+              style: TextStyle(fontSize: 18, color: Colors.black),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/login');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              ),
+              child: const Text('Login Now', style: TextStyle(color: Colors.white)),
+            ),
+          ],
         ),
       ),
     );

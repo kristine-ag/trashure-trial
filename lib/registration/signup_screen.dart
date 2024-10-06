@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors, use_build_context_synchronously
+
 import 'dart:convert';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:trashure/components/booking_info.dart';
+import 'package:trashure/components/firebase_options.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -127,8 +129,7 @@ class _SignupScreenState extends State<SignupScreen> {
               content:
                   Text('Verification email sent! Please check your inbox.')),
         );
-
-        // Redirect user to a verification pending screen or simply sign them out
+        
         await _auth.signOut();
 
         Navigator.pushReplacementNamed(context, '/login');

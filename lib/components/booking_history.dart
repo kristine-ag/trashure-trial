@@ -90,7 +90,7 @@ class BookingHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Booking History'),
+        title: const Text('Booking/s and Transaction History'),
         backgroundColor: Colors.teal, // Sea green theme
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(

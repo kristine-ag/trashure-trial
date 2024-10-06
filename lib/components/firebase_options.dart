@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:trashure/main.dart';
 
+const String googleMapsApiKey = "AIzaSyD1c6gdPl_vhxfXwcLQ87bQ-FRPL55eGF4";
+
 // Kristine Firebase
 // const firebaseConfig = FirebaseOptions(
 //   apiKey: "AIzaSyAjQu-KmwK5-zyrw3TszSurCuts-ylLHrY",

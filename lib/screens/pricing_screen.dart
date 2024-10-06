@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:trashure/components/appbar.dart';
@@ -20,7 +21,7 @@ class _PricingScreenState extends State<PricingScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
               Text(
@@ -34,37 +35,20 @@ class _PricingScreenState extends State<PricingScreen> {
               const SizedBox(height: 10),
               _buildDivider(),
               const SizedBox(height: 20),
-              _buildPricingCard(
-                context,
-                title: 'PET',
-                subtitle: 'Polyethylene Terephthalate',
-                description:
-                    "Traveling is a unique experience as it's the best way to unplug from the pushes and pulls of daily life...",
-                price: '₱ 7.5 / kg',
-                images: [
-                  'assets/images/banner.jpg',
-                  'assets/images/banner.jpg',
-                  'assets/images/banner.jpg',
-                  'assets/images/banner.jpg',
-                ],
+              _buildProductCategory(context, 'plastics'),
+              const SizedBox(height: 40),
+              Text(
+                'METALS',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green[700],
+                ),
               ),
+              const SizedBox(height: 10),
+              _buildDivider(),
               const SizedBox(height: 20),
-              _buildPricingCard(
-                context,
-                title: 'HDPE',
-                subtitle: 'High Density Poly Ethylene',
-                description:
-                    "Traveling is a unique experience as it's the best way to unplug from the pushes and pulls of daily life...",
-                price: '₱ 8.0 / kg',
-                images: [
-                  'assets/images/banner.jpg',
-                  'assets/images/banner.jpg',
-                  'assets/images/banner.jpg',
-                  'assets/images/banner.jpg',
-                ],
-              ),
-              // const Spacer(),
-              // const CustomFooter()
+              _buildProductCategory(context, 'metals'),
             ],
           ),
         ),
@@ -81,6 +65,73 @@ class _PricingScreenState extends State<PricingScreen> {
     );
   }
 
+  Widget _buildProductCategory(BuildContext context, String category) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('products')
+          .where('category', isEqualTo: category)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Text('Error fetching products: ${snapshot.error}');
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const CircularProgressIndicator();
+        }
+        final products = snapshot.data!.docs;
+        if (products.isEmpty) {
+          return const Text('No products available in this category.');
+        }
+        return Column(
+          children: products.map((productDoc) {
+            final productData = productDoc.data() as Map<String, dynamic>;
+            final productId = productDoc.id;
+            final productName = productData['product_name'] ?? '';
+            final productDescription = productData['details'] ?? '';
+            final productImage = productData['picture'] as String?;
+            // Ensure productImages is a List<String>
+            final List<String> productImages = productImage != null ? [productImage] : <String>[];
+            // Fetch the latest price from 'prices' subcollection
+            return FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('products')
+                  .doc(productId)
+                  .collection('prices')
+                  .orderBy('time', descending: true)
+                  .limit(1)
+                  .get(),
+              builder: (context, priceSnapshot) {
+                if (priceSnapshot.hasError) {
+                  return Text('Error fetching price: ${priceSnapshot.error}');
+                }
+                if (priceSnapshot.connectionState == ConnectionState.waiting) {
+                  return const CircularProgressIndicator();
+                }
+                if (priceSnapshot.data == null ||
+                    priceSnapshot.data!.docs.isEmpty) {
+                  return const Text('No price data available');
+                }
+                final priceData =
+                    priceSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                final price = priceData['price'] ?? 0.0;
+                final priceFormatted = '₱ ${price.toStringAsFixed(2)} / kg';
+                // Build the pricing card
+                return _buildPricingCard(
+                  context,
+                  title: productName,
+                  subtitle: productDescription,
+                  description: '', // Add more description if available
+                  price: priceFormatted,
+                  images: productImages, // Now correctly typed as List<String>
+                );
+              },
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
   Widget _buildPricingCard(
     BuildContext context, {
     required String title,
@@ -94,6 +145,7 @@ class _PricingScreenState extends State<PricingScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Product Details
             Expanded(
               flex: 3,
               child: Container(
@@ -106,7 +158,7 @@ class _PricingScreenState extends State<PricingScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      title.toUpperCase(),
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -164,6 +216,7 @@ class _PricingScreenState extends State<PricingScreen> {
               ),
             ),
             const SizedBox(width: 16),
+            // Product Image
             Expanded(
               flex: 5,
               child: Container(
@@ -172,33 +225,26 @@ class _PricingScreenState extends State<PricingScreen> {
                   color: Colors.green[50],
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: SizedBox(
-                  height: 200,
-                  child: GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 3 / 2,
-                    ),
-                    itemCount: images.length,
-                    itemBuilder: (context, index) {
-                      return ClipRRect(
+                child: images.isNotEmpty
+                    ? ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(
-                          images[index],
+                        child: Image.network(
+                          images[0],
+                          height: 200,
+                          width: double.infinity,
                           fit: BoxFit.cover,
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      )
+                    : Container(
+                        height: 200,
+                        color: Colors.grey[300],
+                        child: const Center(child: Text('No Image')),
+                      ),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 20),
       ],
     );
   }
