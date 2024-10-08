@@ -18,10 +18,12 @@ class BookingPreviewScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _BookingPreviewAndScheduleScreenState createState() => _BookingPreviewAndScheduleScreenState();
+  _BookingPreviewAndScheduleScreenState createState() =>
+      _BookingPreviewAndScheduleScreenState();
 }
 
-class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> {
+class _BookingPreviewAndScheduleScreenState
+    extends State<BookingPreviewScreen> {
   String? selectedBookingId;
   String? selectedSchedule;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -31,9 +33,12 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
     super.initState();
   }
 
-  // Function to fetch bookings from Firestore
+  // Function to fetch bookings from Firestore and order them by date
   Stream<QuerySnapshot> fetchBookings() {
-    return FirebaseFirestore.instance.collection('bookings').snapshots();
+    return FirebaseFirestore.instance
+        .collection('bookings')
+        .orderBy('date', descending: false) // Set to true for descending order
+        .snapshots();
   }
 
   // Function to handle booking submission
@@ -47,7 +52,8 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
       final uid = user.uid;
 
       // Fetch user data from Firestore (excluding balance)
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (!userDoc.exists) {
         throw Exception("User data not found.");
       }
@@ -57,7 +63,8 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
       final filteredUserData = Map<String, dynamic>.from(userData);
       filteredUserData.remove('balance');
 
-      final bookingRef = FirebaseFirestore.instance.collection('bookings').doc(bookingId);
+      final bookingRef =
+          FirebaseFirestore.instance.collection('bookings').doc(bookingId);
       final userRef = bookingRef.collection('users').doc(uid);
 
       // Start a batch to perform multiple writes
@@ -135,16 +142,21 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
   @override
   Widget build(BuildContext context) {
     // Calculate the total weight and total price of the selected items
-    double totalWeight = widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      // Use null-aware operators to safely handle null values
-      double itemWeight = (element.value['weight'] ?? 0.0) * 1.0;
-      return previousValue + itemWeight;
-    });
+    double totalWeight = widget.selectedItems.entries.fold(
+        0.0,
+        (previousValue, element) {
+          // Use null-aware operators to safely handle null values
+          double itemWeight = (element.value['weight'] ?? 0.0) * 1.0;
+          return previousValue + itemWeight;
+        });
 
-    double totalPrice = widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      double itemPrice = (element.value['weight'] ?? 0.0) * (element.value['price_per_kg'] ?? 0.0);
-      return previousValue + itemPrice;
-    });
+    double totalPrice = widget.selectedItems.entries.fold(
+        0.0,
+        (previousValue, element) {
+          double itemPrice = (element.value['weight'] ?? 0.0) *
+              (element.value['price_per_kg'] ?? 0.0);
+          return previousValue + itemPrice;
+        });
 
     return Scaffold(
       appBar: CustomAppBar(),
@@ -264,10 +276,13 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
             ),
             const SizedBox(height: 10),
             ...widget.selectedItems.entries.map((entry) {
-              double itemWeight = entry.value['weight'] ?? 0.0; // Handle null weight
-              double pricePerKg = entry.value['price_per_kg'] ?? 0.0; // Handle null price
+              double itemWeight =
+                  entry.value['weight'] ?? 0.0; // Handle null weight
+              double pricePerKg =
+                  entry.value['price_per_kg'] ?? 0.0; // Handle null price
               double totalPriceForItem = itemWeight * pricePerKg;
-              String description = entry.value['description'] ?? 'No description available';
+              String description =
+                  entry.value['description'] ?? 'No description available';
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -405,7 +420,8 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
   }
 
   // Widget to display total weight and total price
-  Widget _buildTotalWeightAndPriceSection(double totalWeight, double totalPrice) {
+  Widget _buildTotalWeightAndPriceSection(
+      double totalWeight, double totalPrice) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.green[100],
@@ -497,11 +513,14 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
                 const SizedBox(height: 10),
                 Column(
                   children: bookings.map((bookingDoc) {
-                    final bookingData = bookingDoc.data() as Map<String, dynamic>;
+                    final bookingData =
+                        bookingDoc.data() as Map<String, dynamic>;
                     final Timestamp dateTimestamp = bookingData['date'];
                     final DateTime bookingDate = dateTimestamp.toDate();
-                    final String formattedDate = DateFormat('MMMM dd, yyyy').format(bookingDate);
-                    final String weekday = DateFormat('EEEE').format(bookingDate);
+                    final String formattedDate =
+                        DateFormat('MMMM dd, yyyy').format(bookingDate);
+                    final String weekday =
+                        DateFormat('EEEE').format(bookingDate);
                     final String bookingId = bookingDoc.id;
 
                     return _buildBookingCard(
@@ -596,13 +615,15 @@ class _BookingPreviewAndScheduleScreenState extends State<BookingPreviewScreen> 
             submitBooking(selectedSchedule!);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Please select a schedule before booking.')),
+              const SnackBar(
+                  content: Text('Please select a schedule before booking.')),
             );
           }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green[700],
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
         ),
         child: const Text(

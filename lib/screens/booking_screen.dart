@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart'; // For address handling
 import 'package:geolocator/geolocator.dart'; // For user location
 import 'package:http/http.dart' as http;
+import 'package:trashure/components/firebase_options.dart';
 import 'package:trashure/screens/bookpreview_screen.dart'; // Import your BookingPreviewScreen
 
 class BookingScreen extends StatefulWidget {
@@ -44,11 +45,11 @@ class _BookingScreenState extends State<BookingScreen> {
   LatLng? currentPosition;
   String? currentAddress;
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
-  final TextEditingController _defaultAddressController = TextEditingController();
+  final TextEditingController _defaultAddressController =
+      TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
-  final TextEditingController _contactController = TextEditingController(); // Controller for phone number
-
-  final String googleApiKey = 'YOUR_GOOGLE_API_KEY'; // Replace with your Google API Key
+  final TextEditingController _contactController =
+      TextEditingController(); // Controller for phone number
 
   @override
   void initState() {
@@ -72,12 +73,15 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _fetchAddressFromFirestore() async {
     if (user != null) {
       try {
-        DocumentSnapshot userData =
-            await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
+        DocumentSnapshot userData = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .get();
 
         if (userData.exists) {
           String fetchedAddress = userData.get('address') ?? '';
-          String fetchedContact = userData.get('contact') ?? ''; // Fetch the contact field
+          String fetchedContact =
+              userData.get('contact') ?? ''; // Fetch the contact field
           GeoPoint fetchedLocation =
               userData.get('location') ?? GeoPoint(7.0731, 125.6122);
 
@@ -87,7 +91,8 @@ class _BookingScreenState extends State<BookingScreen> {
           setState(() {
             currentAddress = fetchedAddress;
             _defaultAddressController.text = fetchedAddress;
-            _contactController.text = fetchedContact; // Set the contact controller
+            _contactController.text =
+                fetchedContact; // Set the contact controller
             currentPosition = fetchedLatLng;
           });
 
@@ -130,8 +135,8 @@ class _BookingScreenState extends State<BookingScreen> {
 
     // Get the current position if there's no stored location
     if (currentPosition == null) {
-      Position position =
-          await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
 
       setState(() {
         currentPosition = LatLng(position.latitude, position.longitude);
@@ -147,39 +152,39 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   // Method to get the address from LatLng using geocoding
-  Future<void> _getAddressFromLatLng(LatLng position) async {
-    final String url =
-        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleApiKey';
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
-          final formattedAddress = data['results'][0]['formatted_address'];
-          setState(() {
-            currentAddress = formattedAddress;
-            _defaultAddressController.text =
-                formattedAddress; // Set the fetched address in the TextField
-          });
-        } else {
-          setState(() {
-            currentAddress = 'No address found';
-            _defaultAddressController.text = 'No address found';
-          });
-        }
+Future<void> _getAddressFromLatLng(LatLng position) async {
+  final String url =
+      'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
+  try {
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+        final formattedAddress = data['results'][0]['formatted_address'];
+        setState(() {
+          currentAddress = formattedAddress;  // Update currentAddress
+          _defaultAddressController.text = formattedAddress;  // Update text field with address
+        });
       } else {
         setState(() {
-          currentAddress = 'Error fetching address: ${response.statusCode}';
-          _defaultAddressController.text = 'Error fetching address';
+          currentAddress = 'No address found';
+          _defaultAddressController.text = 'No address found';
         });
       }
-    } catch (e) {
+    } else {
       setState(() {
-        currentAddress = 'Error fetching address: $e';
+        currentAddress = 'Error fetching address: ${response.statusCode}';
         _defaultAddressController.text = 'Error fetching address';
       });
     }
+  } catch (e) {
+    setState(() {
+      currentAddress = 'Error fetching address: $e';
+      _defaultAddressController.text = 'Error fetching address';
+    });
   }
+}
+
 
   // Method to get LatLng from an address
   Future<void> _getLatLngFromAddress(String address) async {
@@ -275,7 +280,8 @@ class _BookingScreenState extends State<BookingScreen> {
                   if (notifier.value > 0) {
                     final productPrice = _productPrices[productName];
                     final priceTimestamp = _productTimestamps[productName];
-                    final productDescription = _productDescriptions[productName];
+                    final productDescription =
+                        _productDescriptions[productName];
                     final productImage = _productImages[productName];
 
                     selectedItems[productName] = {
@@ -291,7 +297,8 @@ class _BookingScreenState extends State<BookingScreen> {
 
                 if (selectedItems.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please select at least one item.')),
+                    const SnackBar(
+                        content: Text('Please select at least one item.')),
                   );
                   return;
                 }
@@ -333,7 +340,8 @@ class _BookingScreenState extends State<BookingScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green[700],
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
               child: const Text('Next', style: TextStyle(color: Colors.white)),
             ),
@@ -430,11 +438,18 @@ class _BookingScreenState extends State<BookingScreen> {
                   zoom: 15,
                 ),
                 markers: _markers,
-                onTap: (LatLng position) {
-                  _addMarker(position, '${position.latitude}, ${position.longitude}');
-                  _getAddressFromLatLng(
-                      position); // Fetch address from tapped location and update the TextField
-                  currentPosition = position; // Update currentPosition
+                onTap: (LatLng position) async {
+                  // Add marker on the map at the tapped location
+                  _addMarker(
+                      position, '${position.latitude}, ${position.longitude}');
+
+                  // Fetch address from LatLng and update the address field
+                  await _getAddressFromLatLng(position);
+
+                  // Update currentPosition with the tapped location
+                  setState(() {
+                    currentPosition = position;
+                  });
                 },
               ),
             ),
@@ -445,8 +460,8 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   // The rest of your BookingScreen code (product selection methods)
-  Widget _buildProductsSection(BuildContext context, String category, bool showAll,
-      VoidCallback toggleShowAll) {
+  Widget _buildProductsSection(BuildContext context, String category,
+      bool showAll, VoidCallback toggleShowAll) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('products')
@@ -748,9 +763,11 @@ class _BookingScreenState extends State<BookingScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
-              child: const Text('Login Now', style: TextStyle(color: Colors.white)),
+              child: const Text('Login Now',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),

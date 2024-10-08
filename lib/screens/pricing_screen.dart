@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // For formatting the time
 import 'package:trashure/components/appbar.dart';
 
 class PricingScreen extends StatefulWidget {
@@ -21,38 +22,34 @@ class _PricingScreenState extends State<PricingScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
-            // crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              Text(
-                'PLASTICS',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green[700],
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildDivider(),
-              const SizedBox(height: 20),
-              _buildProductCategory(context, 'plastics'),
+              _buildCategorySection(context, 'PLASTICS', 'plastics'),
               const SizedBox(height: 40),
-              Text(
-                'METALS',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green[700],
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildDivider(),
-              const SizedBox(height: 20),
-              _buildProductCategory(context, 'metals'),
+              _buildCategorySection(context, 'METALS', 'metals'),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCategorySection(BuildContext context, String title, String category) {
+    return Column(
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.green[700],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _buildDivider(),
+        const SizedBox(height: 20),
+        _buildProductCategory(context, category),
+      ],
     );
   }
 
@@ -89,16 +86,16 @@ class _PricingScreenState extends State<PricingScreen> {
             final productName = productData['product_name'] ?? '';
             final productDescription = productData['details'] ?? '';
             final productImage = productData['picture'] as String?;
-            // Ensure productImages is a List<String>
             final List<String> productImages = productImage != null ? [productImage] : <String>[];
-            // Fetch the latest price from 'prices' subcollection
+
+            // Fetch both the latest and previous price to calculate the difference
             return FutureBuilder<QuerySnapshot>(
               future: FirebaseFirestore.instance
                   .collection('products')
                   .doc(productId)
                   .collection('prices')
                   .orderBy('time', descending: true)
-                  .limit(1)
+                  .limit(2) // Fetch the latest and previous prices
                   .get(),
               builder: (context, priceSnapshot) {
                 if (priceSnapshot.hasError) {
@@ -107,22 +104,47 @@ class _PricingScreenState extends State<PricingScreen> {
                 if (priceSnapshot.connectionState == ConnectionState.waiting) {
                   return const CircularProgressIndicator();
                 }
-                if (priceSnapshot.data == null ||
-                    priceSnapshot.data!.docs.isEmpty) {
+                if (priceSnapshot.data == null || priceSnapshot.data!.docs.isEmpty) {
                   return const Text('No price data available');
                 }
-                final priceData =
-                    priceSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                final price = priceData['price'] ?? 0.0;
-                final priceFormatted = '₱ ${price.toStringAsFixed(2)} / kg';
+
+                final latestPriceData = priceSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                final latestPrice = latestPriceData['price'] ?? 0.0;
+                final latestTime = latestPriceData['time'] as Timestamp;
+
+                // Format the latest price and time
+                final latestPriceFormatted = '₱ ${latestPrice.toStringAsFixed(2)} / kg';
+                final latestTimeFormatted = DateFormat('yyyy-MM-dd HH:mm').format(latestTime.toDate());
+
+                // Get the previous price (if available) and calculate the price change
+                double previousPrice = latestPrice;
+                String priceChange = '';
+                String priceChangePercentage = '';
+                if (priceSnapshot.data!.docs.length > 1) {
+                  final previousPriceData = priceSnapshot.data!.docs[1].data() as Map<String, dynamic>;
+                  previousPrice = previousPriceData['price'] ?? latestPrice;
+                  final priceDifference = latestPrice - previousPrice;
+                  final percentageChange = (priceDifference / previousPrice) * 100;
+
+                  priceChange = priceDifference > 0
+                      ? '+₱ ${priceDifference.toStringAsFixed(2)}'
+                      : '-₱ ${priceDifference.abs().toStringAsFixed(2)}';
+
+                  priceChangePercentage = percentageChange > 0
+                      ? '+${percentageChange.toStringAsFixed(2)}%'
+                      : '${percentageChange.toStringAsFixed(2)}%';
+                }
+
                 // Build the pricing card
                 return _buildPricingCard(
                   context,
                   title: productName,
                   subtitle: productDescription,
-                  description: '', // Add more description if available
-                  price: priceFormatted,
-                  images: productImages, // Now correctly typed as List<String>
+                  price: latestPriceFormatted,
+                  priceChange: priceChange,
+                  priceChangePercentage: priceChangePercentage,
+                  lastUpdated: latestTimeFormatted,
+                  images: productImages,
                 );
               },
             );
@@ -136,8 +158,10 @@ class _PricingScreenState extends State<PricingScreen> {
     BuildContext context, {
     required String title,
     required String subtitle,
-    required String description,
     required String price,
+    required String priceChange,
+    required String priceChangePercentage,
+    required String lastUpdated,
     required List<String> images,
   }) {
     return Column(
@@ -176,39 +200,26 @@ class _PricingScreenState extends State<PricingScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                      'Change: $priceChange ($priceChangePercentage)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: priceChange.startsWith('+') ? Colors.green : Colors.red,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
-                      description,
+                      'Last Updated: $lastUpdated',
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.black87,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/Book');
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      child: const Text(
-                        'Book Now',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    const SizedBox(height: 10),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
                       ),
                     ),
                   ],

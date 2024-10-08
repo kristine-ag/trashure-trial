@@ -271,7 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               _buildHeaderSection(),
               const SizedBox(height: 20),
-              _buildProfileImageButton(), // New button to change profile image
+              _buildProfileImageButton(),
               const SizedBox(height: 40),
               _buildPersonalInformation(fullName, phoneNumber),
               const SizedBox(height: 40),
@@ -384,7 +384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-    Widget _buildAccountInformation(int balance) {
+  Widget _buildAccountInformation(int balance) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       elevation: 3,
@@ -414,7 +414,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const BookingHistoryScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const BookingHistoryScreen()),
                 );
               },
               icon: const Icon(Icons.history),
@@ -426,7 +427,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
+  // Updated method with password reset functionality
   Widget _buildSecuritySection() {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -451,8 +452,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
               leading: const Icon(Icons.lock),
               title: const Text('Password Reset'),
               subtitle: const Text('Tap to reset your password'),
-              onTap: () {
-                // Add password reset logic here
+              onTap: () async {
+                final email = _auth.currentUser?.email;
+                if (email == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content:
+                            Text('No email associated with this account.')),
+                  );
+                  return;
+                }
+
+                final shouldReset = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Reset Password'),
+                    content: Text(
+                        'We will send a password reset email to $email. Do you want to proceed?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Proceed'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (shouldReset == true) {
+                  try {
+                    await _auth.sendPasswordResetEmail(email: email);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text(
+                              'Password reset email sent to $email')),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text(
+                              'Error sending password reset email: $e')),
+                    );
+                  }
+                }
               },
             ),
           ],
@@ -551,14 +596,16 @@ class _MapScreenState extends State<MapScreen> {
             IconButton(
               icon: const Icon(Icons.check),
               onPressed: () {
-                Navigator.pop(context, _selectedLatLng); // Return the selected location
+                Navigator.pop(context,
+                    _selectedLatLng); // Return the selected location
               },
             )
         ],
       ),
       body: GoogleMap(
         initialCameraPosition: CameraPosition(
-          target: LatLng(widget.initialLocation.latitude, widget.initialLocation.longitude),
+          target: LatLng(widget.initialLocation.latitude,
+              widget.initialLocation.longitude),
           zoom: 16,
         ),
         onMapCreated: (controller) => _mapController = controller,
