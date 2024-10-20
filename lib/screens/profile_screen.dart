@@ -1,3 +1,7 @@
+// profile_screen.dart
+
+// ignore_for_file: unused_field
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
@@ -11,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:trashure/components/appbar.dart';
 import 'package:trashure/components/booking_history.dart';
 import 'package:trashure/components/firebase_options.dart';
+import 'package:trashure/components/terms_and_conditions.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -75,7 +80,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _geoPoint = userDoc['location'] as GeoPoint;
         _address = userDoc['address'] as String;
 
-        print("GeoPoint: Latitude = ${_geoPoint?.latitude}, Longitude = ${_geoPoint?.longitude}");
+        print(
+            "GeoPoint: Latitude = ${_geoPoint?.latitude}, Longitude = ${_geoPoint?.longitude}");
         print("Address: $_address");
       }
     } catch (e) {
@@ -98,29 +104,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           });
         } else {
           print('No address found');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No address found.')),
-          );
+          _showAlertDialog('No address found.');
         }
       } else {
         print('Error fetching address');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error fetching address.')),
-        );
+        _showAlertDialog('Error fetching address.');
       }
     } catch (e) {
       print('Error fetching address: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error fetching address: $e')),
-      );
+      _showAlertDialog('Error fetching address: $e');
     }
   }
 
   Future<void> _pickLocationOnMap() async {
     if (_geoPoint == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No initial location available.')),
-      );
+      _showAlertDialog('No initial location available.');
       return;
     }
 
@@ -140,27 +138,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final userId = _auth.currentUser?.uid;
         if (userId == null) return;
 
-        await FirebaseFirestore.instance.collection('users').doc(userId).update({
-          'location': GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude),
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .update({
+          'location':
+              GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude),
           'address': _address,
         });
 
         setState(() {
-          _geoPoint = GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude);
+          _geoPoint =
+              GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude);
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Address updated successfully!')),
-        );
+        _showAlertDialog('Address updated successfully!');
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching address: $e')),
-        );
+        _showAlertDialog('Error fetching address: $e');
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No location selected.')),
-      );
+      _showAlertDialog('No location selected.');
     }
   }
 
@@ -218,19 +215,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isUploading = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile image uploaded successfully!')),
-        );
+        _showAlertDialog('Profile image uploaded successfully!');
       } catch (e) {
         setState(() {
           _isUploading = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload profile image: $e')),
-        );
+        _showAlertDialog('Failed to upload profile image: $e');
       }
     }
+  }
+
+  // New method to show AlertDialog instead of SnackBar
+  void _showAlertDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Notification'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              child: const Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -275,7 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 40),
               _buildPersonalInformation(fullName, phoneNumber),
               const SizedBox(height: 40),
-              _buildAccountInformation(balance),
+              _buildAccountInformation(),
               const SizedBox(height: 40),
               _buildSecuritySection(),
               const SizedBox(height: 40),
@@ -384,7 +398,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAccountInformation(int balance) {
+  Widget _buildAccountInformation() {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       elevation: 3,
@@ -402,12 +416,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fontWeight: FontWeight.bold,
                 fontSize: 20,
               ),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              leading: const Icon(Icons.stars),
-              title: const Text('Points/Rewards Balance'),
-              subtitle: Text('$balance points'),
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(
@@ -455,11 +463,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () async {
                 final email = _auth.currentUser?.email;
                 if (email == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content:
-                            Text('No email associated with this account.')),
-                  );
+                  _showAlertDialog('No email associated with this account.');
                   return;
                 }
 
@@ -485,17 +489,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 if (shouldReset == true) {
                   try {
                     await _auth.sendPasswordResetEmail(email: email);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text(
-                              'Password reset email sent to $email')),
-                    );
+                    _showAlertDialog('Password reset email sent to $email');
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text(
-                              'Error sending password reset email: $e')),
-                    );
+                    _showAlertDialog('Error sending password reset email: $e');
                   }
                 }
               },
@@ -539,7 +535,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Terms & Conditions / Privacy Policy'),
               subtitle: const Text('Tap to view'),
               onTap: () {
-                // Add Terms & Conditions or Privacy Policy navigation logic here
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TermsAndConditionsPage(),
+                  ),
+                );
               },
             ),
           ],
@@ -596,8 +597,8 @@ class _MapScreenState extends State<MapScreen> {
             IconButton(
               icon: const Icon(Icons.check),
               onPressed: () {
-                Navigator.pop(context,
-                    _selectedLatLng); // Return the selected location
+                Navigator.pop(
+                    context, _selectedLatLng); // Return the selected location
               },
             )
         ],

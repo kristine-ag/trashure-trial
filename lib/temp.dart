@@ -48,7 +48,7 @@ class HomeScreen extends StatelessWidget {
           'assets/images/landing.jpg', // Replace with your image path
           width: double.infinity,
           height:
-              MediaQuery.of(context).size.height * 1, // Use relative height
+              MediaQuery.of(context).size.height * 0.4, // Use relative height
           fit: BoxFit.cover,
         ),
         // Gradient overlay to add a green tint
@@ -69,7 +69,7 @@ class HomeScreen extends StatelessWidget {
         // Text Overlay
         Positioned.fill(
           child: Align(
-            alignment: Alignment.topRight,
+            alignment: Alignment.center,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -348,8 +348,9 @@ They will verify the weight and quality of the recyclables, after which the paym
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: plasticTypes.length,
-      physics: const ScrollPhysics(),
       shrinkWrap: true, // Prevents GridView from taking infinite height
+      physics:
+          const NeverScrollableScrollPhysics(), // Prevent internal scrolling
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: gridCount, // Responsive grid column count
         crossAxisSpacing: 16,
@@ -425,19 +426,14 @@ They will verify the weight and quality of the recyclables, after which the paym
       // Add more metal types as needed
     ];
 
-    // Calculate grid column count based on screen width
-    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: metalTypes.length,
-      physics: const ScrollPhysics(),
-      shrinkWrap: true, // Prevents GridView from taking infinite height
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridCount, // Responsive grid column count
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4, // Adjusted to 2
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.8, // Adjusted aspect ratio
+        childAspectRatio: 0.8,
       ),
       itemBuilder: (context, index) {
         final metal = metalTypes[index];
@@ -508,19 +504,14 @@ They will verify the weight and quality of the recyclables, after which the paym
       // Add more glass types as needed
     ];
 
-    // Calculate grid column count based on screen width
-    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: glassTypes.length,
-      physics: const ScrollPhysics(),
-      shrinkWrap: true, // Prevents GridView from taking infinite height
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridCount, // Responsive grid column count
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4, // Adjusted to 2
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.8, // Adjusted aspect ratio
+        childAspectRatio: 0.8,
       ),
       itemBuilder: (context, index) {
         final glass = glassTypes[index];

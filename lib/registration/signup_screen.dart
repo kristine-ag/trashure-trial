@@ -31,11 +31,27 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _selectedAddress;
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
 
+  String _selectedCategory = 'household'; // Default category
+
   Future<void> _signup() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedAddress == null || _selectedLocation == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please select an address using the map.')),
+        await showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Address Required'),
+              content: Text('Please select an address using the map.'),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       } else {
         // Check if contact number already exists
@@ -45,8 +61,22 @@ class _SignupScreenState extends State<SignupScreen> {
             .get();
 
         if (contactSnapshot.docs.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Contact number already exists.')),
+          await showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: Text('Contact Number Exists'),
+                content: Text('Contact number already exists.'),
+                actions: [
+                  TextButton(
+                    child: Text('OK'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              );
+            },
           );
         } else {
           await _completeSignup();
@@ -114,6 +144,8 @@ class _SignupScreenState extends State<SignupScreen> {
           'uid': user.uid,
           'email': user.email,
           'firstName': _firstNameController.text,
+          'profileImage': "",
+          'landmark': "",
           'lastName': _lastNameController.text,
           'contact': _contactController.text,
           'address': _selectedAddress,
@@ -122,21 +154,48 @@ class _SignupScreenState extends State<SignupScreen> {
                   _selectedLocation!.latitude, _selectedLocation!.longitude)
               : null,
           'balance': 1,
+          'category': _selectedCategory, // Added category field
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text('Verification email sent! Please check your inbox.')),
-        );
         
-        await _auth.signOut();
+        await showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Verification Email Sent'),
+              content:
+                  Text('Verification email sent! Please check your inbox.'),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
+                ),
+              ],
+            );
+          },
+        );
 
-        Navigator.pushReplacementNamed(context, '/login');
+        await _auth.signOut();
       }
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signup Failed: ${e.message}')),
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Signup Failed'),
+            content: Text('Signup Failed: ${e.message}'),
+            actions: [
+              TextButton(
+                child: Text('OK'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
       );
     }
   }
@@ -272,6 +331,36 @@ class _SignupScreenState extends State<SignupScreen> {
                               },
                             ),
                             SizedBox(height: 16.0),
+                            // Added DropdownButtonFormField for category selection
+                            DropdownButtonFormField<String>(
+                              value: _selectedCategory,
+                              decoration: InputDecoration(
+                                labelText: 'Category',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'household',
+                                  child: Text('Household'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'business',
+                                  child: Text('Business'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedCategory = value!;
+                                });
+                              },
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please select a category';
+                                }
+                                return null;
+                              },
+                            ),
+                            SizedBox(height: 16.0),
                             ElevatedButton(
                               onPressed: _signup,
                               style: ElevatedButton.styleFrom(
@@ -367,12 +456,26 @@ class _AddressSelectionScreenState extends State<AddressSelectionScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         child: Icon(Icons.check),
-        onPressed: () {
+        onPressed: () async {
           if (selectedPosition != null) {
             Navigator.pop(context, selectedPosition);
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Please select a location on the map.')),
+            await showDialog(
+              context: context,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  title: Text('No Location Selected'),
+                  content: Text('Please select a location on the map.'),
+                  actions: [
+                    TextButton(
+                      child: Text('OK'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ],
+                );
+              },
             );
           }
         },

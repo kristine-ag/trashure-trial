@@ -7,8 +7,11 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart'; // For address handling
 import 'package:geolocator/geolocator.dart'; // For user location
 import 'package:http/http.dart' as http;
+import 'package:trashure/components/booking_history.dart';
 import 'package:trashure/components/firebase_options.dart';
+import 'package:trashure/components/footer.dart';
 import 'package:trashure/screens/bookpreview_screen.dart'; // Import your BookingPreviewScreen
+import 'package:flutter/services.dart'; // For TextInputFormatter
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({Key? key}) : super(key: key);
@@ -21,11 +24,12 @@ class _BookingScreenState extends State<BookingScreen> {
   // Variables for product selection
   bool _showAllPlastics = false;
   bool _showAllMetals = false;
+  bool _showAllGlass = false;
 
   final user = FirebaseAuth.instance.currentUser;
 
-  // Map to track quantities for products dynamically
-  final Map<String, ValueNotifier<int>> _productQuantities = {};
+  // Map to track quantities for products dynamically (now using double)
+  final Map<String, ValueNotifier<double>> _productQuantities = {};
 
   // Map to track product prices dynamically
   final Map<String, double> _productPrices = {};
@@ -39,6 +43,10 @@ class _BookingScreenState extends State<BookingScreen> {
   // Map to track product images dynamically
   final Map<String, String> _productImages = {};
 
+  // ValueNotifier to track total estimated profit
+  final ValueNotifier<double> _totalEstimatedProfit =
+      ValueNotifier<double>(0.0);
+
   // Variables for address confirmation
   GoogleMapController? mapController;
   final Set<Marker> _markers = {};
@@ -51,12 +59,15 @@ class _BookingScreenState extends State<BookingScreen> {
   final TextEditingController _contactController =
       TextEditingController(); // Controller for phone number
 
+  bool _canBook = true; // Variable to track if the user can book
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _fetchAddressFromFirestore(); // Fetch address and location from Firestore
       await _getUserLocation();
+      await _checkBookingAvailability(); // Check if the user can book
     });
   }
 
@@ -66,6 +77,7 @@ class _BookingScreenState extends State<BookingScreen> {
     _defaultAddressController.dispose();
     _landmarkController.dispose();
     _contactController.dispose(); // Dispose the contact controller
+    _totalEstimatedProfit.dispose(); // Dispose the ValueNotifier
     super.dispose();
   }
 
@@ -152,39 +164,39 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   // Method to get the address from LatLng using geocoding
-Future<void> _getAddressFromLatLng(LatLng position) async {
-  final String url =
-      'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
-  try {
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['status'] == 'OK' && data['results'].isNotEmpty) {
-        final formattedAddress = data['results'][0]['formatted_address'];
-        setState(() {
-          currentAddress = formattedAddress;  // Update currentAddress
-          _defaultAddressController.text = formattedAddress;  // Update text field with address
-        });
+  Future<void> _getAddressFromLatLng(LatLng position) async {
+    final String url =
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final formattedAddress = data['results'][0]['formatted_address'];
+          setState(() {
+            currentAddress = formattedAddress; // Update currentAddress
+            _defaultAddressController.text =
+                formattedAddress; // Update text field with address
+          });
+        } else {
+          setState(() {
+            currentAddress = 'No address found';
+            _defaultAddressController.text = 'No address found';
+          });
+        }
       } else {
         setState(() {
-          currentAddress = 'No address found';
-          _defaultAddressController.text = 'No address found';
+          currentAddress = 'Error fetching address: ${response.statusCode}';
+          _defaultAddressController.text = 'Error fetching address';
         });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        currentAddress = 'Error fetching address: ${response.statusCode}';
+        currentAddress = 'Error fetching address: $e';
         _defaultAddressController.text = 'Error fetching address';
       });
     }
-  } catch (e) {
-    setState(() {
-      currentAddress = 'Error fetching address: $e';
-      _defaultAddressController.text = 'Error fetching address';
-    });
   }
-}
-
 
   // Method to get LatLng from an address
   Future<void> _getLatLngFromAddress(String address) async {
@@ -221,133 +233,278 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
     });
   }
 
+  // Method to update total estimated profit
+  void _updateTotalEstimatedProfit() {
+    double totalProfit = 0.0;
+    _productQuantities.forEach((productName, notifier) {
+      final weight = notifier.value;
+      final pricePerKg = _productPrices[productName] ?? 0.0;
+      totalProfit += weight * pricePerKg;
+    });
+    _totalEstimatedProfit.value = totalProfit;
+  }
+
+  // New method to check for pending bookings
+  Future<bool> _checkIfUserHasPendingBooking() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      return false;
+    }
+
+    try {
+      // Fetch all bookings
+      final bookingsSnapshot =
+          await FirebaseFirestore.instance.collection('bookings').get();
+
+      for (var bookingDoc in bookingsSnapshot.docs) {
+        // Get the 'users' subcollection
+        final userDocSnapshot =
+            await bookingDoc.reference.collection('users').doc(userId).get();
+
+        if (userDocSnapshot.exists) {
+          String userStatus = userDocSnapshot['status'] ?? '';
+          if (userStatus == 'booked') {
+            return true; // User has a pending booking
+          }
+        }
+      }
+    } catch (e) {
+      print('Error checking pending bookings: $e');
+    }
+
+    return false;
+  }
+
+  // Method to check booking availability
+  Future<void> _checkBookingAvailability() async {
+    bool hasPendingBooking = await _checkIfUserHasPendingBooking();
+    setState(() {
+      _canBook = !hasPendingBooking;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (user == null) {
       return _buildLoginPrompt(context);
     }
 
-    return Scaffold(
-      appBar: CustomAppBar(),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Product Selection Section
-            _buildSectionTitle('SELECT PRODUCTS'),
-            const SizedBox(height: 10),
-            Container(
-              height: 4,
-              width: 400,
-              color: Colors.green[700],
+    if (!_canBook) {
+      return Scaffold(
+        appBar: CustomAppBar(),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'You have a pending booking.',
+                  style: TextStyle(fontSize: 20, color: Colors.red),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Please wait until your current booking is completed before making a new one.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const BookingHistoryScreen()),
+                    );
+                  },
+                  child: Text('View Booking History'),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            _buildSectionTitle('PLASTICS'),
-            const SizedBox(height: 10),
-            _buildProductsSection(context, 'plastics', _showAllPlastics, () {
-              setState(() {
-                _showAllPlastics = !_showAllPlastics;
-              });
-            }),
-            const SizedBox(height: 20),
-            _buildSectionTitle('METALS'),
-            const SizedBox(height: 10),
-            _buildProductsSection(context, 'metals', _showAllMetals, () {
-              setState(() {
-                _showAllMetals = !_showAllMetals;
-              });
-            }),
-            const SizedBox(height: 20),
+          ),
+        ),
+      );
+    }
 
-            // Address Confirmation Section
-            _buildSectionTitle('CONFIRM YOUR ADDRESS'),
-            const SizedBox(height: 10),
-            Container(
-              height: 4,
-              width: 400,
-              color: Colors.green[700],
-            ),
-            const SizedBox(height: 20),
-            _buildAddressSection(context),
-            const SizedBox(height: 20),
-            // Next Button
-            ElevatedButton(
-              onPressed: () async {
-                // Collect selected items
-                Map<String, dynamic> selectedItems = {};
-
-                _productQuantities.forEach((productName, notifier) {
-                  if (notifier.value > 0) {
-                    final productPrice = _productPrices[productName];
-                    final priceTimestamp = _productTimestamps[productName];
-                    final productDescription =
-                        _productDescriptions[productName];
-                    final productImage = _productImages[productName];
-
-                    selectedItems[productName] = {
-                      'weight': notifier.value,
-                      'price_per_kg': productPrice,
-                      'total_price': notifier.value * productPrice!,
-                      'price_timestamp': priceTimestamp,
-                      'description': productDescription,
-                      'image': productImage,
-                    };
-                  }
-                });
-
-                if (selectedItems.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Please select at least one item.')),
-                  );
-                  return;
-                }
-
-                final address = _defaultAddressController.text;
-                final landmark = _landmarkController.text;
-                final contact = _contactController.text;
-                final fullAddress = '$address, Landmark: $landmark';
-
-                // Optionally, update Firestore with the new data
-                if (user != null) {
-                  try {
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user!.uid)
-                        .update({
-                      'address': address,
-                      'landmark': landmark,
-                      'contact': contact,
-                      'location': GeoPoint(currentPosition?.latitude ?? 0.0,
-                          currentPosition?.longitude ?? 0.0),
-                    });
-                  } catch (e) {
-                    print('Error updating Firestore: $e');
-                  }
-                }
-
-                // Navigate to BookingPreviewScreen
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BookingPreviewScreen(
-                      selectedItems: selectedItems,
-                      address: fullAddress,
-                      contact: contact,
-                    ),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green[700],
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+    return DefaultTabController(
+      length: 3, // Number of tabs
+      child: Scaffold(
+        appBar: CustomAppBar(),
+        body: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Product Selection Section
+              _buildSectionTitle('SELECT YOUR RECYCLABLES'),
+              const SizedBox(height: 10),
+              Container(
+                height: 4,
+                width: 400,
+                color: Colors.green[700],
               ),
-              child: const Text('Next', style: TextStyle(color: Colors.white)),
-            ),
-            const SizedBox(height: 20),
-            _buildFooter(context),
-          ],
+              const SizedBox(height: 20),
+              // Tabs
+              Container(
+                color: Colors.green[100],
+                child: TabBar(
+                  indicatorColor: Colors.green[700],
+                  labelColor: Colors.green[700],
+                  unselectedLabelColor: Colors.black54,
+                  tabs: [
+                    Tab(text: 'Plastics'),
+                    Tab(text: 'Metals'),
+                    Tab(text: 'Glass'),
+                  ],
+                ),
+              ),
+              Container(
+                height: 600, // Adjust height as needed
+                child: TabBarView(
+                  children: [
+                    // Plastics Tab
+                    _buildProductsSection(context, 'plastics', _showAllPlastics,
+                        () {
+                      setState(() {
+                        _showAllPlastics = !_showAllPlastics;
+                      });
+                    }),
+                    // Metals Tab
+                    _buildProductsSection(context, 'metals', _showAllMetals,
+                        () {
+                      setState(() {
+                        _showAllMetals = !_showAllMetals;
+                      });
+                    }),
+                    // Glass Tab
+                    _buildProductsSection(context, 'glass', _showAllGlass, () {
+                      setState(() {
+                        _showAllGlass = !_showAllGlass;
+                      });
+                    }),
+                  ],
+                ),
+              ),
+
+              // Display Total Estimated Profit
+              ValueListenableBuilder<double>(
+                valueListenable: _totalEstimatedProfit,
+                builder: (context, totalProfit, child) {
+                  return Text(
+                    'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color:
+                          totalProfit >= 50.0 ? Colors.green[700] : Colors.red,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Address Confirmation Section
+              _buildSectionTitle('CONFIRM YOUR ADDRESS'),
+              const SizedBox(height: 10),
+              Container(
+                height: 4,
+                width: 400,
+                color: Colors.green[700],
+              ),
+              const SizedBox(height: 20),
+              _buildAddressSection(context),
+              const SizedBox(height: 20),
+              // Next Button
+              ElevatedButton(
+                onPressed: () async {
+                  if (_totalEstimatedProfit.value < 50.0) {
+                    // Show prompt
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please add more recyclables to reach the minimum amount of ₱50.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  // Collect selected items
+                  Map<String, dynamic> selectedItems = {};
+
+                  _productQuantities.forEach((productName, notifier) {
+                    if (notifier.value > 0) {
+                      final productPrice = _productPrices[productName];
+                      final priceTimestamp = _productTimestamps[productName];
+                      final productDescription =
+                          _productDescriptions[productName];
+                      final productImage = _productImages[productName];
+
+                      selectedItems[productName] = {
+                        'weight': notifier.value,
+                        'price_per_kg': productPrice,
+                        'total_price': notifier.value * productPrice!,
+                        'price_timestamp': priceTimestamp,
+                        'description': productDescription,
+                        'image': productImage,
+                      };
+                    }
+                  });
+
+                  if (selectedItems.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Please select at least one item.')),
+                    );
+                    return;
+                  }
+
+                  final address = _defaultAddressController.text;
+                  final landmark = _landmarkController.text;
+                  final contact = _contactController.text;
+                  final fullAddress = '$address, Landmark: $landmark';
+
+                  // Optionally, update Firestore with the new data
+                  if (user != null) {
+                    try {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user!.uid)
+                          .update({
+                        'address': address,
+                        'landmark': landmark,
+                        'contact': contact,
+                        'location': GeoPoint(currentPosition?.latitude ?? 0.0,
+                            currentPosition?.longitude ?? 0.0),
+                      });
+                    } catch (e) {
+                      print('Error updating Firestore: $e');
+                    }
+                  }
+
+                  // Navigate to BookingPreviewScreen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BookingPreviewScreen(
+                        selectedItems: selectedItems,
+                        address: fullAddress,
+                        contact: contact,
+                      ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[700],
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
+                child:
+                    const Text('Next', style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 20),
+              const Footer(),
+            ],
+          ),
         ),
       ),
     );
@@ -359,8 +516,43 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         children: [
+          // Map on the left side
           Expanded(
-            flex: 3,
+            flex: 4,
+            child: Container(
+              height: 450,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.green, width: 2),
+              ),
+              child: GoogleMap(
+                onMapCreated: (controller) {
+                  mapController = controller;
+                },
+                initialCameraPosition: CameraPosition(
+                  target: currentPosition ?? _initialPosition,
+                  zoom: 15,
+                ),
+                markers: _markers,
+                onTap: (LatLng position) async {
+                  // Add marker on the map at the tapped location
+                  _addMarker(
+                      position, '${position.latitude}, ${position.longitude}');
+
+                  // Fetch address from LatLng and update the address field
+                  await _getAddressFromLatLng(position);
+
+                  // Update currentPosition with the tapped location
+                  setState(() {
+                    currentPosition = position;
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Text fields on the right side
+          Expanded(
+            flex: 4,
             child: Padding(
               padding: const EdgeInsets.all(32.0),
               child: Column(
@@ -421,45 +613,12 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
               ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 4,
-            child: Container(
-              height: 400,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.green, width: 2),
-              ),
-              child: GoogleMap(
-                onMapCreated: (controller) {
-                  mapController = controller;
-                },
-                initialCameraPosition: CameraPosition(
-                  target: currentPosition ?? _initialPosition,
-                  zoom: 15,
-                ),
-                markers: _markers,
-                onTap: (LatLng position) async {
-                  // Add marker on the map at the tapped location
-                  _addMarker(
-                      position, '${position.latitude}, ${position.longitude}');
-
-                  // Fetch address from LatLng and update the address field
-                  await _getAddressFromLatLng(position);
-
-                  // Update currentPosition with the tapped location
-                  setState(() {
-                    currentPosition = position;
-                  });
-                },
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  // The rest of your BookingScreen code (product selection methods)
+  // Product selection methods
   Widget _buildProductsSection(BuildContext context, String category,
       bool showAll, VoidCallback toggleShowAll) {
     return StreamBuilder<QuerySnapshot>(
@@ -518,7 +677,7 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
 
                     // Initialize weight and price for each product if not set
                     _productQuantities.putIfAbsent(
-                        productName, () => ValueNotifier<int>(0));
+                        productName, () => ValueNotifier<double>(0));
                     _productPrices.putIfAbsent(productName, () => productPrice);
                     _productTimestamps.putIfAbsent(
                         productName, () => priceTimestamp);
@@ -547,6 +706,7 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
     );
   }
 
+  // Modified _buildProductCard to accept decimal weights and limit to two decimal places
   Widget _buildProductCard(
     BuildContext context,
     String title,
@@ -559,7 +719,7 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
     TextEditingController weightController = TextEditingController();
 
     // Initialize with the current weight value
-    weightController.text = _productQuantities[title]!.value.toString();
+    weightController.text = _productQuantities[title]!.value.toStringAsFixed(2);
 
     return SizedBox(
       width: (MediaQuery.of(context).size.width - 48) /
@@ -612,8 +772,9 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                     ),
                   ),
                   Expanded(
+                    flex: 2,
                     child: Text(
-                      '₱ ${pricePerKg.toStringAsFixed(1)} / kg',
+                      '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -625,11 +786,11 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                 ],
               ),
               Divider(thickness: 1, color: Colors.green[100]),
-              ValueListenableBuilder<int>(
+              ValueListenableBuilder<double>(
                 valueListenable: _productQuantities[title]!,
                 builder: (context, weight, child) {
                   // Update the text field when the weight changes
-                  weightController.text = weight.toString();
+                  weightController.text = weight.toStringAsFixed(2);
 
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -638,7 +799,13 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                         icon: Icon(Icons.remove, color: Colors.green[700]),
                         onPressed: () {
                           if (weight > 0) {
-                            _productQuantities[title]!.value -= 1;
+                            double newWeight =
+                                (weight - 0.1).clamp(0.0, double.infinity);
+                            // Round to two decimal places
+                            newWeight =
+                                double.parse(newWeight.toStringAsFixed(2));
+                            _productQuantities[title]!.value = newWeight;
+                            _updateTotalEstimatedProfit();
                           }
                         },
                       ),
@@ -648,7 +815,8 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                         height: 40,
                         child: TextField(
                           controller: weightController,
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
@@ -656,11 +824,20 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                             ),
                             contentPadding: EdgeInsets.zero,
                           ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d+\.?\d{0,2}'),
+                            ),
+                          ],
                           onChanged: (value) {
                             // Update the weight value when the text changes
-                            int? newWeight = int.tryParse(value);
+                            double? newWeight = double.tryParse(value);
                             if (newWeight != null) {
+                              // Round to two decimal places
+                              newWeight =
+                                  double.parse(newWeight.toStringAsFixed(2));
                               _productQuantities[title]!.value = newWeight;
+                              _updateTotalEstimatedProfit();
                             }
                           },
                         ),
@@ -668,7 +845,13 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                       IconButton(
                         icon: Icon(Icons.add, color: Colors.green[700]),
                         onPressed: () {
-                          _productQuantities[title]!.value += 1;
+                          double newWeight =
+                              _productQuantities[title]!.value + 0.1;
+                          // Round to two decimal places
+                          newWeight =
+                              double.parse(newWeight.toStringAsFixed(2));
+                          _productQuantities[title]!.value = newWeight;
+                          _updateTotalEstimatedProfit();
                         },
                       ),
                       Column(
@@ -682,7 +865,7 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
                             ),
                           ),
                           Text(
-                            '₱ ${(pricePerKg * weight).toStringAsFixed(1)}',
+                            '₱ ${(pricePerKg * weight).toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -772,48 +955,6 @@ Future<void> _getAddressFromLatLng(LatLng position) async {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildFooter(BuildContext context) {
-    return Container(
-      color: Colors.grey[200],
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildFooterColumn('Our Scope',
-              ['Sample District 1', 'Sample District 2', 'Sample District 3']),
-          _buildFooterColumn(
-              'Our Partners', ['Lalala Inc.', 'Trash R Us', 'SM Cares']),
-          _buildFooterColumn('About Us', ['Our Story', 'Work with us']),
-          _buildFooterColumn('Contact Us', ['Our Story', 'Work with us']),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFooterColumn(String title, List<String> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        const SizedBox(height: 10),
-        for (var item in items)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Text(
-              item,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
-            ),
-          ),
-      ],
     );
   }
 }

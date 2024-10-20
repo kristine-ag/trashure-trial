@@ -27,6 +27,8 @@ class _PricingScreenState extends State<PricingScreen> {
               _buildCategorySection(context, 'PLASTICS', 'plastics'),
               const SizedBox(height: 40),
               _buildCategorySection(context, 'METALS', 'metals'),
+              const SizedBox(height: 40),
+              _buildCategorySection(context, 'GLASS', 'glass'),
             ],
           ),
         ),
@@ -79,76 +81,100 @@ class _PricingScreenState extends State<PricingScreen> {
         if (products.isEmpty) {
           return const Text('No products available in this category.');
         }
-        return Column(
-          children: products.map((productDoc) {
-            final productData = productDoc.data() as Map<String, dynamic>;
-            final productId = productDoc.id;
-            final productName = productData['product_name'] ?? '';
-            final productDescription = productData['details'] ?? '';
-            final productImage = productData['picture'] as String?;
-            final List<String> productImages = productImage != null ? [productImage] : <String>[];
 
-            // Fetch both the latest and previous price to calculate the difference
-            return FutureBuilder<QuerySnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('products')
-                  .doc(productId)
-                  .collection('prices')
-                  .orderBy('time', descending: true)
-                  .limit(2) // Fetch the latest and previous prices
-                  .get(),
-              builder: (context, priceSnapshot) {
-                if (priceSnapshot.hasError) {
-                  return Text('Error fetching price: ${priceSnapshot.error}');
-                }
-                if (priceSnapshot.connectionState == ConnectionState.waiting) {
-                  return const CircularProgressIndicator();
-                }
-                if (priceSnapshot.data == null || priceSnapshot.data!.docs.isEmpty) {
-                  return const Text('No price data available');
-                }
-
-                final latestPriceData = priceSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                final latestPrice = latestPriceData['price'] ?? 0.0;
-                final latestTime = latestPriceData['time'] as Timestamp;
-
-                // Format the latest price and time
-                final latestPriceFormatted = '₱ ${latestPrice.toStringAsFixed(2)} / kg';
-                final latestTimeFormatted = DateFormat('yyyy-MM-dd HH:mm').format(latestTime.toDate());
-
-                // Get the previous price (if available) and calculate the price change
-                double previousPrice = latestPrice;
-                String priceChange = '';
-                String priceChangePercentage = '';
-                if (priceSnapshot.data!.docs.length > 1) {
-                  final previousPriceData = priceSnapshot.data!.docs[1].data() as Map<String, dynamic>;
-                  previousPrice = previousPriceData['price'] ?? latestPrice;
-                  final priceDifference = latestPrice - previousPrice;
-                  final percentageChange = (priceDifference / previousPrice) * 100;
-
-                  priceChange = priceDifference > 0
-                      ? '+₱ ${priceDifference.toStringAsFixed(2)}'
-                      : '-₱ ${priceDifference.abs().toStringAsFixed(2)}';
-
-                  priceChangePercentage = percentageChange > 0
-                      ? '+${percentageChange.toStringAsFixed(2)}%'
-                      : '${percentageChange.toStringAsFixed(2)}%';
-                }
-
-                // Build the pricing card
-                return _buildPricingCard(
-                  context,
-                  title: productName,
-                  subtitle: productDescription,
-                  price: latestPriceFormatted,
-                  priceChange: priceChange,
-                  priceChangePercentage: priceChangePercentage,
-                  lastUpdated: latestTimeFormatted,
-                  images: productImages,
-                );
-              },
+        // Group cards in pairs of two for a row layout
+        List<Widget> rows = [];
+        for (int i = 0; i < products.length; i += 2) {
+          // If there's only one item left, add an Expanded with an empty Container for the second column
+          if (i + 1 < products.length) {
+            rows.add(
+              Row(
+                children: [
+                  Expanded(child: _buildProductCard(context, products[i])),
+                  const SizedBox(width: 10), // Add some spacing between cards
+                  Expanded(child: _buildProductCard(context, products[i + 1])),
+                ],
+              ),
             );
-          }).toList(),
+          } else {
+            rows.add(
+              Row(
+                children: [
+                  Expanded(child: _buildProductCard(context, products[i])),
+                  const SizedBox(width: 10),
+                  Expanded(child: Container()), // Empty container for balance
+                ],
+              ),
+            );
+          }
+        }
+        return Column(children: rows);
+      },
+    );
+  }
+
+  Widget _buildProductCard(BuildContext context, QueryDocumentSnapshot productDoc) {
+    final productData = productDoc.data() as Map<String, dynamic>;
+    final productId = productDoc.id;
+    final productName = productData['product_name'] ?? '';
+    final productDescription = productData['details'] ?? '';
+
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('products')
+          .doc(productId)
+          .collection('prices')
+          .orderBy('time', descending: true)
+          .limit(5) // Fetch the last 5 price changes
+          .get(),
+      builder: (context, priceSnapshot) {
+        if (priceSnapshot.hasError) {
+          return Text('Error fetching price: ${priceSnapshot.error}');
+        }
+        if (priceSnapshot.connectionState == ConnectionState.waiting) {
+          return const CircularProgressIndicator();
+        }
+        if (priceSnapshot.data == null || priceSnapshot.data!.docs.isEmpty) {
+          return const Text('No price data available');
+        }
+
+        final prices = priceSnapshot.data!.docs;
+        final latestPriceData = prices.first.data() as Map<String, dynamic>;
+        final latestPrice = latestPriceData['price'] ?? 0.0;
+        final latestTime = latestPriceData['time'] as Timestamp;
+
+        // Format the latest price and time
+        final latestPriceFormatted = '₱ ${latestPrice.toStringAsFixed(2)} / kg';
+        final latestTimeFormatted = DateFormat('yyyy-MM-dd HH:mm').format(latestTime.toDate());
+
+        // Get the previous price to calculate the difference
+        double previousPrice = latestPrice;
+        String priceDifference = '';
+        Color differenceColor = Colors.black; // Default color for no change
+
+        if (prices.length > 1) {
+          final previousPriceData = prices[1].data() as Map<String, dynamic>;
+          previousPrice = previousPriceData['price'] ?? latestPrice;
+
+          final difference = latestPrice - previousPrice;
+          priceDifference = difference > 0
+              ? '+₱${difference.toStringAsFixed(2)}'
+              : '-₱${difference.abs().toStringAsFixed(2)}';
+
+          // Set color based on whether the difference is positive or negative
+          differenceColor = difference > 0 ? Colors.green : Colors.red;
+        }
+
+        // Build the pricing card with price history and difference
+        return _buildPricingCard(
+          context,
+          title: productName,
+          subtitle: productDescription,
+          price: latestPriceFormatted,
+          lastUpdated: latestTimeFormatted,
+          priceDifference: priceDifference,
+          differenceColor: differenceColor,
+          priceChanges: prices,
         );
       },
     );
@@ -159,104 +185,118 @@ class _PricingScreenState extends State<PricingScreen> {
     required String title,
     required String subtitle,
     required String price,
-    required String priceChange,
-    required String priceChangePercentage,
     required String lastUpdated,
-    required List<String> images,
+    required String priceDifference,
+    required Color differenceColor,
+    required List<QueryDocumentSnapshot> priceChanges,
   }) {
-    return Column(
-      children: [
-        Row(
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product Details
-            Expanded(
-              flex: 3,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green[100],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      price,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Change: $priceChange ($priceChangePercentage)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: priceChange.startsWith('+') ? Colors.green : Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Last Updated: $lastUpdated',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
+            Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
               ),
             ),
-            const SizedBox(width: 16),
-            // Product Image
-            Expanded(
-              flex: 5,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: 8),
+            Text(
+              price,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'Difference: ',
+                  style: const TextStyle(fontSize: 16, color: Colors.black87),
                 ),
-                child: images.isNotEmpty
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          images[0],
-                          height: 200,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    : Container(
-                        height: 200,
-                        color: Colors.grey[300],
-                        child: const Center(child: Text('No Image')),
-                      ),
+                Text(
+                  priceDifference,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: differenceColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Last Updated: $lastUpdated',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Price History (Last 5 Changes):',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildPriceHistory(priceChanges),
+            const SizedBox(height: 10),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black87,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 20),
-      ],
+      ),
+    );
+  }
+
+  // Widget to display the history of the last 5 price changes
+  Widget _buildPriceHistory(List<QueryDocumentSnapshot> priceChanges) {
+    return Column(
+      children: priceChanges.map((priceDoc) {
+        final priceData = priceDoc.data() as Map<String, dynamic>;
+        final price = priceData['price'] ?? 0.0;
+        final time = priceData['time'] as Timestamp;
+        final formattedPrice = '₱ ${price.toStringAsFixed(2)} / kg';
+        final formattedTime = DateFormat('yyyy-MM-dd HH:mm').format(time.toDate());
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                formattedPrice,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                formattedTime,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

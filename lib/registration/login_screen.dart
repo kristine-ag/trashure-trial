@@ -32,32 +32,44 @@ class _LoginScreenState extends State<LoginScreen> {
         User? user = userCredential.user;
 
         if (user != null && !user.emailVerified) {
-          // Email not verified, show a message and allow to resend verification email
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+          // Email not verified, show a modal and allow to resend verification email
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Email Not Verified'),
               content: Text(
-                  'Please verify your email. Check your inbox or tap to resend.'),
-              action: SnackBarAction(
-                label: 'Resend',
-                onPressed: () async {
-                  await user.sendEmailVerification();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text(
-                            'Verification email sent! Please check your inbox.')),
-                  );
-                },
-              ),
+                  'Please verify your email. Check your inbox or tap Resend to receive a new verification email.'),
+              actions: [
+                TextButton(
+                  child: Text('Resend'),
+                  onPressed: () async {
+                    Navigator.of(context).pop(); // Close the dialog
+                    await user.sendEmailVerification();
+                    // Show another dialog confirming that email was sent
+                    await showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text('Verification Email Sent'),
+                        content:
+                            Text('Verification email sent! Please check your inbox.'),
+                        actions: [
+                          TextButton(
+                            child: Text('OK'),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
             ),
           );
           await FirebaseAuth.instance.signOut(); // Sign out the user
-        } else {
-          // Email verified, proceed with login
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login Successful!')),
-          );
-
-          _redirectToLastRoute(); // Navigate to the last route or home page
         }
       } on FirebaseAuthException catch (e) {
         String message;
@@ -78,12 +90,32 @@ class _LoginScreenState extends State<LoginScreen> {
           default:
             message = 'Invalid Email or Password. Try Signing Up!';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Login Failed'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                child: Text('OK'),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login Failed: ${e.toString()}')),
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Login Failed'),
+            content: Text('Login Failed: ${e.toString()}'),
+            actions: [
+              TextButton(
+                child: Text('OK'),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
         );
       }
     }
@@ -106,21 +138,51 @@ class _LoginScreenState extends State<LoginScreen> {
         User? user = userCredential.user;
 
         if (user != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Google Sign-In Successful!')),
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Google Sign-In Successful'),
+              content: Text('You have successfully signed in with Google.'),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _redirectToLastRoute();
+                  },
+                ),
+              ],
+            ),
           );
-
-          _redirectToLastRoute();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Google Sign-In Failed: User is null')),
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Google Sign-In Failed'),
+              content: Text('Google Sign-In Failed: User is null'),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
           );
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Google Sign-In Failed')),
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Google Sign-In Failed'),
+          content: Text('Google Sign-In Failed'),
+          actions: [
+            TextButton(
+              child: Text('OK'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
       );
     }
   }
@@ -232,8 +294,158 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 16.0),
                             TextButton(
-                              onPressed: () {
-                                // TODO: Implement forgot password functionality
+                              onPressed: () async {
+                                TextEditingController emailController =
+                                    TextEditingController(
+                                        text: _emailController.text);
+
+                                bool? shouldReset = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) {
+                                    return AlertDialog(
+                                      title: const Text('Reset Password'),
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                              'Please enter your email to receive a password reset link.'),
+                                          const SizedBox(height: 10),
+                                          TextField(
+                                            controller: emailController,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Email',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          child: const Text('Cancel'),
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(false),
+                                        ),
+                                        TextButton(
+                                          child: const Text('Send'),
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(true),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+
+                                if (shouldReset == true) {
+                                  String email = emailController.text.trim();
+                                  // Validate the email
+                                  if (email.isEmpty) {
+                                    // Show error dialog
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Invalid Email'),
+                                        content:
+                                            const Text('Please enter your email'),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('OK'),
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                      .hasMatch(email)) {
+                                    // Show error dialog
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Invalid Email'),
+                                        content: const Text(
+                                            'Please enter a valid email address'),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('OK'),
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  try {
+                                    await FirebaseAuth.instance
+                                        .sendPasswordResetEmail(email: email);
+                                    // Show success dialog
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Email Sent'),
+                                        content: Text(
+                                            'Password reset email sent to $email'),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('OK'),
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } on FirebaseAuthException catch (e) {
+                                    // Handle Firebase specific errors
+                                    String message;
+                                    switch (e.code) {
+                                      case 'invalid-email':
+                                        message =
+                                            'The email address is not valid.';
+                                        break;
+                                      case 'user-not-found':
+                                        message =
+                                            'No user found for the given email.';
+                                        break;
+                                      default:
+                                        message =
+                                            'Error sending password reset email: ${e.message}';
+                                    }
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Error'),
+                                        content: Text(message),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('OK'),
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    // General error
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Error'),
+                                        content: Text(
+                                            'Error sending password reset email: ${e.toString()}'),
+                                        actions: [
+                                          TextButton(
+                                            child: const Text('OK'),
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                }
                               },
                               child: const Text("Forgot your Password?"),
                             ),

@@ -27,10 +27,12 @@ class _BookingPreviewAndScheduleScreenState
   String? selectedBookingId;
   String? selectedSchedule;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  Set<String> userBookedDates = {}; // Stores booking IDs where the user has already booked
 
   @override
   void initState() {
     super.initState();
+    fetchUserBookedDates();
   }
 
   // Function to fetch bookings from Firestore and order them by date
@@ -39,6 +41,33 @@ class _BookingPreviewAndScheduleScreenState
         .collection('bookings')
         .orderBy('date', descending: false) // Set to true for descending order
         .snapshots();
+  }
+
+  // Function to fetch booking IDs where the user has already booked
+  void fetchUserBookedDates() async {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      // User not logged in
+      return;
+    }
+    final uid = user.uid;
+    Set<String> bookedDates = {};
+
+    QuerySnapshot bookingsSnapshot =
+        await FirebaseFirestore.instance.collection('bookings').get();
+
+    for (var bookingDoc in bookingsSnapshot.docs) {
+      DocumentSnapshot userDoc =
+          await bookingDoc.reference.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        // User has booked this date
+        bookedDates.add(bookingDoc.id);
+      }
+    }
+
+    setState(() {
+      userBookedDates = bookedDates;
+    });
   }
 
   // Function to handle booking submission
@@ -78,42 +107,40 @@ class _BookingPreviewAndScheduleScreenState
       double totalUserWeight = 0;
 
       // Loop through the selected items and add each recyclable item, including the calculated item_price and item_weight
-      if (widget.selectedItems != null) {
-        for (var entry in widget.selectedItems.entries) {
-          double weight = entry.value['weight'];
-          double pricePerKg = entry.value['price_per_kg'];
-          double itemPrice = weight * pricePerKg; // Calculate item price
-          totalUserPrice += itemPrice; // Add to user's total price
-          totalUserWeight += weight; // Add to user's total weight
+      for (var entry in widget.selectedItems.entries) {
+        double weight = entry.value['weight'];
+        double pricePerKg = entry.value['price_per_kg'];
+        double itemPrice = weight * pricePerKg; // Calculate item price
+        totalUserPrice += itemPrice; // Add to user's total price
+        totalUserWeight += weight; // Add to user's total weight
 
-          // Add recyclables to user's sub-collection
-          batch.set(userRef.collection('recyclables').doc(), {
-            'type': entry.key,
-            'weight': weight, // Add item_weight field
-            'price': pricePerKg,
-            'item_price': itemPrice, // Add item_price field
-            'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),
-          });
-        }
-
-        // Add total_price and total_weight to the user document
-        batch.update(userRef, {
-          'total_price': totalUserPrice,
-          'total_weight': totalUserWeight, // Add total_weight field
+        // Add recyclables to user's sub-collection
+        batch.set(userRef.collection('recyclables').doc(), {
+          'type': entry.key,
+          'weight': weight, // Add item_weight field
+          'price': pricePerKg,
+          'item_price': itemPrice, // Add item_price field
+          'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),
         });
       }
 
-      // Commit the batch
+      // Add total_price and total_weight to the user document
+      batch.update(userRef, {
+        'total_price': totalUserPrice,
+        'total_weight': totalUserWeight,
+        'status': "booked" 
+      });
+
       await batch.commit();
 
-      // Now, calculate the overall price and overall weight for the booking by summing all users' total prices and weights
+      // Now, calculate the overall price and overall weight 
       final usersSnapshot = await bookingRef.collection('users').get();
       double overallPrice = 0;
       double overallWeight = 0;
       for (var userDoc in usersSnapshot.docs) {
         final userData = userDoc.data() as Map<String, dynamic>;
         overallPrice += userData['total_price'] ?? 0;
-        overallWeight += userData['total_weight'] ?? 0; // Sum the total weights
+        overallWeight += userData['total_weight'] ?? 0;
       }
 
       // Update the overall_price and overall_weight fields in the bookings document
@@ -142,21 +169,19 @@ class _BookingPreviewAndScheduleScreenState
   @override
   Widget build(BuildContext context) {
     // Calculate the total weight and total price of the selected items
-    double totalWeight = widget.selectedItems.entries.fold(
-        0.0,
-        (previousValue, element) {
-          // Use null-aware operators to safely handle null values
-          double itemWeight = (element.value['weight'] ?? 0.0) * 1.0;
-          return previousValue + itemWeight;
-        });
+    double totalWeight =
+        widget.selectedItems.entries.fold(0.0, (previousValue, element) {
+      // Use null-aware operators to safely handle null values
+      double itemWeight = (element.value['weight'] ?? 0.0) * 1.0;
+      return previousValue + itemWeight;
+    });
 
-    double totalPrice = widget.selectedItems.entries.fold(
-        0.0,
-        (previousValue, element) {
-          double itemPrice = (element.value['weight'] ?? 0.0) *
-              (element.value['price_per_kg'] ?? 0.0);
-          return previousValue + itemPrice;
-        });
+    double totalPrice =
+        widget.selectedItems.entries.fold(0.0, (previousValue, element) {
+      double itemPrice = (element.value['weight'] ?? 0.0) *
+          (element.value['price_per_kg'] ?? 0.0);
+      return previousValue + itemPrice;
+    });
 
     return Scaffold(
       appBar: CustomAppBar(),
@@ -169,27 +194,7 @@ class _BookingPreviewAndScheduleScreenState
               children: [
                 // Title and separator
                 const SizedBox(height: 20),
-                Center(
-                  child: Column(
-                    children: [
-                      Text(
-                        'BOOKING PREVIEW',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green[700],
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        height: 4,
-                        width: 400,
-                        color: Colors.green[700],
-                      ),
-                    ],
-                  ),
-                ),
+                _buildSectionTitle('BOOKING PREVIEW'),
                 const SizedBox(height: 30),
 
                 // Handle layout based on screen width
@@ -203,7 +208,8 @@ class _BookingPreviewAndScheduleScreenState
                         flex: 6,
                         child: _buildSelectedItemsWithPrices(),
                       ),
-                      const SizedBox(width: 20), // Add spacing between the cards
+                      const SizedBox(
+                          width: 20), // Add spacing between the cards
 
                       // Address Card takes 40% of the screen
                       Flexible(
@@ -227,16 +233,11 @@ class _BookingPreviewAndScheduleScreenState
                 // Total Weight and Price Section
                 _buildTotalWeightAndPriceSection(totalWeight, totalPrice),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 50),
 
                 // Schedule Selection
                 _buildSectionTitle('BOOKING SCHEDULE'),
-                const SizedBox(height: 10),
-                Container(
-                  height: 4,
-                  width: 400,
-                  color: Colors.green[700],
-                ),
+
                 const SizedBox(height: 30),
                 _buildScheduleSection(),
 
@@ -259,6 +260,8 @@ class _BookingPreviewAndScheduleScreenState
 
   // Widget to display selected items along with their quantities, prices, and total price per item
   Widget _buildSelectedItemsWithPrices() {
+    double totalEstimatedProfit = 0.0; // Initialize total estimated profit
+
     return Card(
       elevation: 5,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -283,6 +286,9 @@ class _BookingPreviewAndScheduleScreenState
               double totalPriceForItem = itemWeight * pricePerKg;
               String description =
                   entry.value['description'] ?? 'No description available';
+
+              // Add to total estimated profit
+              totalEstimatedProfit += totalPriceForItem;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -345,6 +351,32 @@ class _BookingPreviewAndScheduleScreenState
                 ),
               );
             }).toList(),
+            const Divider(
+              height: 30,
+              thickness: 1,
+              color: Colors.grey,
+            ),
+            // Display Total Estimated Profit
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total Estimated Profit',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '₱${totalEstimatedProfit.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[700],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -497,7 +529,8 @@ class _BookingPreviewAndScheduleScreenState
 
         return Card(
           elevation: 5,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -523,11 +556,14 @@ class _BookingPreviewAndScheduleScreenState
                         DateFormat('EEEE').format(bookingDate);
                     final String bookingId = bookingDoc.id;
 
+                    bool isAlreadyBooked = userBookedDates.contains(bookingId);
+
                     return _buildBookingCard(
                       context,
                       bookingId,
                       formattedDate,
                       weekday,
+                      isAlreadyBooked,
                     );
                   }).toList(),
                 ),
@@ -544,16 +580,26 @@ class _BookingPreviewAndScheduleScreenState
     String bookingId,
     String date,
     String weekday,
+    bool isAlreadyBooked,
   ) {
     final isSelected = selectedBookingId == bookingId;
 
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedBookingId = bookingId;
-          selectedSchedule = bookingId;
-        });
-      },
+      onTap: isAlreadyBooked
+          ? () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      'You already have a scheduled booking for this day.'),
+                ),
+              );
+            }
+          : () {
+              setState(() {
+                selectedBookingId = bookingId;
+                selectedSchedule = bookingId;
+              });
+            },
       child: SizedBox(
         width: MediaQuery.of(context).size.width - 48,
         child: Card(
@@ -561,7 +607,9 @@ class _BookingPreviewAndScheduleScreenState
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          color: isSelected ? const Color(0xFF8DD3BB) : Colors.white,
+          color: isAlreadyBooked
+              ? Colors.grey[300]
+              : (isSelected ? const Color(0xFF8DD3BB) : Colors.white),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Row(
@@ -586,18 +634,32 @@ class _BookingPreviewAndScheduleScreenState
                         color: Colors.grey[700],
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    if (isAlreadyBooked) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        'Already booked',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.red[700],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                Radio(
-                  value: bookingId,
-                  groupValue: selectedSchedule,
-                  onChanged: (value) {
-                    setState(() {
-                      selectedSchedule = value as String?;
-                    });
-                  },
-                ),
+                isAlreadyBooked
+                    ? Icon(
+                        Icons.block,
+                        color: Colors.red[700],
+                      )
+                    : Radio(
+                        value: bookingId,
+                        groupValue: selectedSchedule,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedSchedule = value as String?;
+                          });
+                        },
+                      ),
               ],
             ),
           ),
@@ -638,14 +700,24 @@ class _BookingPreviewAndScheduleScreenState
     return Padding(
       padding: const EdgeInsets.fromLTRB(1, 16, 1, 1),
       child: Center(
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.green[700],
-            letterSpacing: 1.5,
-          ),
+        child: Column(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.green[700],
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              height: 4,
+              width: 400,
+              color: Colors.green[700],
+            ),
+          ],
         ),
       ),
     );
