@@ -16,6 +16,7 @@ import 'package:trashure/components/appbar.dart';
 import 'package:trashure/components/booking_history.dart';
 import 'package:trashure/components/firebase_options.dart';
 import 'package:trashure/components/terms_and_conditions.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -278,7 +279,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               '${userDoc['firstName'] ?? ''} ${userDoc['lastName'] ?? ''}';
           String phoneNumber =
               userDoc['contact'] ?? 'No phone number available';
-          int balance = userDoc['balance'] ?? 0;
 
           return ListView(
             padding: EdgeInsets.zero,
@@ -323,7 +323,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: _profileImageUrl != null
             ? CircleAvatar(
                 radius: 50,
-                backgroundImage: NetworkImage(_profileImageUrl!),
+                backgroundImage: CachedNetworkImageProvider(_profileImageUrl!),
+                onBackgroundImageError: (error, stackTrace) {
+                  print('Error loading image: $error');
+                },
               )
             : const CircleAvatar(
                 radius: 50,
@@ -553,8 +556,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: ElevatedButton.icon(
-        onPressed: () {
-          _auth.signOut();
+        onPressed: () async {
+          try {
+            // Sign out the user from Firebase
+            await _auth.signOut();
+
+            // Navigate to the Home Screen (replace 'HomeScreen' with the actual route or widget)
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              '/', // Assuming '/home' is the route name for your HomeScreen
+              (Route<dynamic> route) => false, // Removes all previous routes
+            );
+          } catch (e) {
+            _showAlertDialog('Error logging out: $e');
+          }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.redAccent,

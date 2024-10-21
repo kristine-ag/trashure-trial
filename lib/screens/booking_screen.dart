@@ -1,6 +1,7 @@
 import 'dart:convert'; // For jsonDecode
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:trashure/components/appbar.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -326,201 +327,209 @@ class _BookingScreenState extends State<BookingScreen> {
       );
     }
 
-    return DefaultTabController(
-      length: 3, // Number of tabs
-      child: Scaffold(
-        appBar: CustomAppBar(),
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Product Selection Section
-              _buildSectionTitle('SELECT YOUR RECYCLABLES'),
-              const SizedBox(height: 10),
-              Container(
-                height: 4,
-                width: 400,
-                color: Colors.green[700],
-              ),
-              const SizedBox(height: 20),
-              // Tabs
-              Container(
-                color: Colors.green[100],
-                child: TabBar(
-                  indicatorColor: Colors.green[700],
-                  labelColor: Colors.green[700],
-                  unselectedLabelColor: Colors.black54,
-                  tabs: [
-                    Tab(text: 'Plastics'),
-                    Tab(text: 'Metals'),
-                    Tab(text: 'Glass'),
-                  ],
-                ),
-              ),
-              Container(
-                height: 600, // Adjust height as needed
-                child: TabBarView(
-                  children: [
-                    // Plastics Tab
-                    _buildProductsSection(context, 'plastics', _showAllPlastics,
-                        () {
-                      setState(() {
-                        _showAllPlastics = !_showAllPlastics;
-                      });
-                    }),
-                    // Metals Tab
-                    _buildProductsSection(context, 'metals', _showAllMetals,
-                        () {
-                      setState(() {
-                        _showAllMetals = !_showAllMetals;
-                      });
-                    }),
-                    // Glass Tab
-                    _buildProductsSection(context, 'glass', _showAllGlass, () {
-                      setState(() {
-                        _showAllGlass = !_showAllGlass;
-                      });
-                    }),
-                  ],
-                ),
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isMobile = constraints.maxWidth < 600;
 
-              // Display Total Estimated Profit
-              ValueListenableBuilder<double>(
-                valueListenable: _totalEstimatedProfit,
-                builder: (context, totalProfit, child) {
-                  return Text(
-                    'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color:
-                          totalProfit >= 50.0 ? Colors.green[700] : Colors.red,
+        return DefaultTabController(
+          length: 3, // Number of tabs
+          child: Scaffold(
+            appBar: CustomAppBar(),
+            body: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Product Selection Section
+                  _buildSectionTitle('SELECT YOUR RECYCLABLES'),
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 4,
+                    width: isMobile ? MediaQuery.of(context).size.width * 0.8 : 400,
+                    color: Colors.green[700],
+                  ),
+                  const SizedBox(height: 20),
+                  // Tabs
+                  Container(
+                    color: Colors.green[100],
+                    child: TabBar(
+                      indicatorColor: Colors.green[700],
+                      labelColor: Colors.green[700],
+                      unselectedLabelColor: Colors.black54,
+                      tabs: [
+                        Tab(text: 'Plastics'),
+                        Tab(text: 'Metals'),
+                        Tab(text: 'Glass'),
+                      ],
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
+                  ),
+                  Container(
+                    height: isMobile ? 800 : 600, // Adjust height as needed
+                    child: TabBarView(
+                      children: [
+                        // Plastics Tab
+                        _buildProductsSection(context, 'plastics', _showAllPlastics,
+                            () {
+                          setState(() {
+                            _showAllPlastics = !_showAllPlastics;
+                          });
+                        }, isMobile),
+                        // Metals Tab
+                        _buildProductsSection(context, 'metals', _showAllMetals,
+                            () {
+                          setState(() {
+                            _showAllMetals = !_showAllMetals;
+                          });
+                        }, isMobile),
+                        // Glass Tab
+                        _buildProductsSection(context, 'glass', _showAllGlass, () {
+                          setState(() {
+                            _showAllGlass = !_showAllGlass;
+                          });
+                        }, isMobile),
+                      ],
+                    ),
+                  ),
 
-              // Address Confirmation Section
-              _buildSectionTitle('CONFIRM YOUR ADDRESS'),
-              const SizedBox(height: 10),
-              Container(
-                height: 4,
-                width: 400,
-                color: Colors.green[700],
-              ),
-              const SizedBox(height: 20),
-              _buildAddressSection(context),
-              const SizedBox(height: 20),
-              // Next Button
-              ElevatedButton(
-                onPressed: () async {
-                  if (_totalEstimatedProfit.value < 50.0) {
-                    // Show prompt
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Please add more recyclables to reach the minimum amount of ₱50.',
+                  // Display Total Estimated Profit
+                  ValueListenableBuilder<double>(
+                    valueListenable: _totalEstimatedProfit,
+                    builder: (context, totalProfit, child) {
+                      return Text(
+                        'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              totalProfit >= 50.0 ? Colors.green[700] : Colors.red,
                         ),
-                      ),
-                    );
-                    return;
-                  }
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
 
-                  // Collect selected items
-                  Map<String, dynamic> selectedItems = {};
+                  // Address Confirmation Section
+                  _buildSectionTitle('CONFIRM YOUR ADDRESS'),
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 4,
+                    width: isMobile ? MediaQuery.of(context).size.width * 0.8 : 400,
+                    color: Colors.green[700],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildAddressSection(context, isMobile),
+                  const SizedBox(height: 20),
+                  // Next Button
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (_totalEstimatedProfit.value < 50.0) {
+                        // Show prompt
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Please add more recyclables to reach the minimum amount of ₱50.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
 
-                  _productQuantities.forEach((productName, notifier) {
-                    if (notifier.value > 0) {
-                      final productPrice = _productPrices[productName];
-                      final priceTimestamp = _productTimestamps[productName];
-                      final productDescription =
-                          _productDescriptions[productName];
-                      final productImage = _productImages[productName];
+                      // Collect selected items
+                      Map<String, dynamic> selectedItems = {};
 
-                      selectedItems[productName] = {
-                        'weight': notifier.value,
-                        'price_per_kg': productPrice,
-                        'total_price': notifier.value * productPrice!,
-                        'price_timestamp': priceTimestamp,
-                        'description': productDescription,
-                        'image': productImage,
-                      };
-                    }
-                  });
+                      _productQuantities.forEach((productName, notifier) {
+                        if (notifier.value > 0) {
+                          final productPrice = _productPrices[productName];
+                          final priceTimestamp = _productTimestamps[productName];
+                          final productDescription =
+                              _productDescriptions[productName];
+                          final productImage = _productImages[productName];
 
-                  if (selectedItems.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Please select at least one item.')),
-                    );
-                    return;
-                  }
-
-                  final address = _defaultAddressController.text;
-                  final landmark = _landmarkController.text;
-                  final contact = _contactController.text;
-                  final fullAddress = '$address, Landmark: $landmark';
-
-                  // Optionally, update Firestore with the new data
-                  if (user != null) {
-                    try {
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user!.uid)
-                          .update({
-                        'address': address,
-                        'landmark': landmark,
-                        'contact': contact,
-                        'location': GeoPoint(currentPosition?.latitude ?? 0.0,
-                            currentPosition?.longitude ?? 0.0),
+                          selectedItems[productName] = {
+                            'weight': notifier.value,
+                            'price_per_kg': productPrice,
+                            'total_price': notifier.value * productPrice!,
+                            'price_timestamp': priceTimestamp,
+                            'description': productDescription,
+                            'image': productImage,
+                          };
+                        }
                       });
-                    } catch (e) {
-                      print('Error updating Firestore: $e');
-                    }
-                  }
 
-                  // Navigate to BookingPreviewScreen
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => BookingPreviewScreen(
-                        selectedItems: selectedItems,
-                        address: fullAddress,
-                        contact: contact,
-                      ),
+                      if (selectedItems.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please select at least one item.')),
+                        );
+                        return;
+                      }
+
+                      final address = _defaultAddressController.text;
+                      final landmark = _landmarkController.text;
+                      final contact = _contactController.text;
+                      final fullAddress = '$address, Landmark: $landmark';
+
+                      // Optionally, update Firestore with the new data
+                      if (user != null) {
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user!.uid)
+                              .update({
+                            'address': address,
+                            'landmark': landmark,
+                            'contact': contact,
+                            'location': GeoPoint(currentPosition?.latitude ?? 0.0,
+                                currentPosition?.longitude ?? 0.0),
+                          });
+                        } catch (e) {
+                          print('Error updating Firestore: $e');
+                        }
+                      }
+
+                      // Navigate to BookingPreviewScreen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BookingPreviewScreen(
+                            selectedItems: selectedItems,
+                            address: fullAddress,
+                            contact: contact,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[700],
+                      padding: isMobile
+                          ? const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12)
+                          : const EdgeInsets.symmetric(
+                              horizontal: 32, vertical: 16),
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[700],
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                ),
-                child:
-                    const Text('Next', style: TextStyle(color: Colors.white)),
+                    child: const Text('Next', style: TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(height: 20),
+                  const Footer(),
+                ],
               ),
-              const SizedBox(height: 20),
-              const Footer(),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   // Widget to build the address confirmation section
-  Widget _buildAddressSection(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          // Map on the left side
-          Expanded(
-            flex: 4,
-            child: Container(
-              height: 450,
+  Widget _buildAddressSection(BuildContext context, bool isMobile) {
+    if (isMobile) {
+      // Mobile layout
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Column(
+          children: [
+            // Map
+            Container(
+              height: 300,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.green, width: 2),
               ),
@@ -535,8 +544,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 markers: _markers,
                 onTap: (LatLng position) async {
                   // Add marker on the map at the tapped location
-                  _addMarker(
-                      position, '${position.latitude}, ${position.longitude}');
+                  _addMarker(position, '${position.latitude}, ${position.longitude}');
 
                   // Fetch address from LatLng and update the address field
                   await _getAddressFromLatLng(position);
@@ -548,165 +556,231 @@ class _BookingScreenState extends State<BookingScreen> {
                 },
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-          // Text fields on the right side
-          Expanded(
-            flex: 4,
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Default Address',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
+            const SizedBox(height: 16),
+            // Text fields
+            _buildAddressFields(),
+          ],
+        ),
+      );
+    } else {
+      // Desktop layout
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Row(
+          children: [
+            // Map on the left side
+            Expanded(
+              flex: 4,
+              child: Container(
+                height: 450,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.green, width: 2),
+                ),
+                child: GoogleMap(
+                  onMapCreated: (controller) {
+                    mapController = controller;
+                  },
+                  initialCameraPosition: CameraPosition(
+                    target: currentPosition ?? _initialPosition,
+                    zoom: 15,
                   ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _defaultAddressController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Enter default address',
-                    ),
-                    onSubmitted: (value) {
-                      _getLatLngFromAddress(value); // Fetch LatLng from address
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'House no., Landmark, etc.',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _landmarkController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Enter landmark or house no.',
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Phone Number',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _contactController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Enter phone number',
-                    ),
-                    keyboardType: TextInputType.phone,
-                  ),
-                ],
+                  markers: _markers,
+                  onTap: (LatLng position) async {
+                    // Add marker on the map at the tapped location
+                    _addMarker(
+                        position, '${position.latitude}, ${position.longitude}');
+
+                    // Fetch address from LatLng and update the address field
+                    await _getAddressFromLatLng(position);
+
+                    // Update currentPosition with the tapped location
+                    setState(() {
+                      currentPosition = position;
+                    });
+                  },
+                ),
               ),
             ),
+            const SizedBox(width: 16),
+            // Text fields on the right side
+            Expanded(
+              flex: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: _buildAddressFields(),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildAddressFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Default Address',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _defaultAddressController,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Enter default address',
+          ),
+          onSubmitted: (value) {
+            _getLatLngFromAddress(value); // Fetch LatLng from address
+          },
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'House no., Landmark, etc.',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _landmarkController,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Enter landmark or house no.',
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Phone Number',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _contactController,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Enter phone number',
+          ),
+          keyboardType: TextInputType.phone,
+        ),
+      ],
     );
   }
 
   // Product selection methods
-  Widget _buildProductsSection(BuildContext context, String category,
-      bool showAll, VoidCallback toggleShowAll) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('products')
-          .where('category', isEqualTo: category)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const CircularProgressIndicator();
-        }
+  Widget _buildProductsSection(
+  BuildContext context,
+  String category,
+  bool showAll,
+  VoidCallback toggleShowAll,
+  bool isMobile,
+) {
+  return StreamBuilder<QuerySnapshot>(
+    stream: FirebaseFirestore.instance
+        .collection('products')
+        .where('category', isEqualTo: category)
+        .snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const CircularProgressIndicator();
+      }
 
-        if (snapshot.hasError) {
-          return const Text('Error loading products');
-        }
+      if (snapshot.hasError) {
+        return const Text('Error loading products');
+      }
 
-        final products = snapshot.data?.docs ?? [];
+      final products = snapshot.data?.docs ?? [];
 
-        if (products.isEmpty) {
-          return const Text('No products available in this category.');
-        }
+      if (products.isEmpty) {
+        return const Text('No products available in this category.');
+      }
 
-        // Show either 2 cards or all cards based on `showAll`
-        final visibleProducts = showAll ? products : products.take(2).toList();
+      // Show either 2 cards or all cards based on `showAll`
+      final visibleProducts = showAll ? products : products.take(3).toList();
 
-        return Column(
-          children: [
-            Wrap(
-              spacing: 16.0,
-              runSpacing: 16.0,
-              children: visibleProducts.map((productDoc) {
-                final productData = productDoc.data() as Map<String, dynamic>;
-                final productName = productData['product_name'].toUpperCase();
-                final productDescription = productData['details'];
-                final productImage = productData['picture'];
+      return Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 16.0,
+                runSpacing: 16.0,
+                children: visibleProducts.map((productDoc) {
+                  final productData =
+                      productDoc.data() as Map<String, dynamic>;
+                  final productName = productData['product_name'].toUpperCase();
+                  final productDescription = productData['details'];
+                  final productImage = productData['picture'];
 
-                // Fetch the latest price from the subcollection "prices"
-                return FutureBuilder<QuerySnapshot>(
-                  future: FirebaseFirestore.instance
-                      .collection('products')
-                      .doc(productDoc.id)
-                      .collection('prices')
-                      .orderBy('time', descending: true)
-                      .limit(1)
-                      .get(),
-                  builder: (context, priceSnapshot) {
-                    if (!priceSnapshot.hasData ||
-                        priceSnapshot.data!.docs.isEmpty) {
-                      return const Text('Price unavailable');
-                    }
+                  // Fetch the latest price from the subcollection "prices"
+                  return FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('products')
+                        .doc(productDoc.id)
+                        .collection('prices')
+                        .orderBy('time', descending: true)
+                        .limit(1)
+                        .get(),
+                    builder: (context, priceSnapshot) {
+                      if (!priceSnapshot.hasData ||
+                          priceSnapshot.data!.docs.isEmpty) {
+                        return const Text('Price unavailable');
+                      }
 
-                    final priceData = priceSnapshot.data!.docs.first.data()
-                        as Map<String, dynamic>;
-                    final productPrice = priceData['price'] as double;
-                    final priceTimestamp = priceData['time'] as Timestamp;
+                      final priceData = priceSnapshot.data!.docs.first.data()
+                          as Map<String, dynamic>;
+                      final productPrice = priceData['price'] as double;
+                      final priceTimestamp = priceData['time'] as Timestamp;
 
-                    // Initialize weight and price for each product if not set
-                    _productQuantities.putIfAbsent(
-                        productName, () => ValueNotifier<double>(0));
-                    _productPrices.putIfAbsent(productName, () => productPrice);
-                    _productTimestamps.putIfAbsent(
-                        productName, () => priceTimestamp);
+                      // Initialize weight and price for each product if not set
+                      _productQuantities.putIfAbsent(
+                          productName, () => ValueNotifier<double>(0));
+                      _productPrices.putIfAbsent(productName, () => productPrice);
+                      _productTimestamps.putIfAbsent(
+                          productName, () => priceTimestamp);
 
-                    // Store product descriptions and images for later use
-                    _productDescriptions.putIfAbsent(
-                        productName, () => productDescription);
-                    _productImages.putIfAbsent(productName, () => productImage);
+                      // Store product descriptions and images for later use
+                      _productDescriptions.putIfAbsent(
+                          productName, () => productDescription);
+                      _productImages.putIfAbsent(
+                          productName, () => productImage);
 
-                    return _buildProductCard(
+                      return _buildProductCard(
                         context,
                         productName,
                         productDescription,
                         productPrice,
                         productImage,
-                        priceTimestamp);
-                  },
-                );
-              }).toList(),
+                        priceTimestamp,
+                        isMobile,
+                      );
+                    },
+                  );
+                }).toList(),
+              ),
             ),
-            _buildToggleButton(
-                showAll, 'See more...', 'See less...', toggleShowAll),
-          ],
-        );
-      },
-    );
-  }
+          ),
+          _buildToggleButton(
+            showAll,
+            'See more...',
+            'See less...',
+            toggleShowAll,
+          ),
+        ],
+      );
+    },
+  );
+}
 
-  // Modified _buildProductCard to accept decimal weights and limit to two decimal places
+
   Widget _buildProductCard(
     BuildContext context,
     String title,
@@ -714,6 +788,7 @@ class _BookingScreenState extends State<BookingScreen> {
     double pricePerKg,
     String imageUrl,
     Timestamp priceTimestamp,
+    bool isMobile,
   ) {
     // Controller to manage the input for weight
     TextEditingController weightController = TextEditingController();
@@ -722,40 +797,43 @@ class _BookingScreenState extends State<BookingScreen> {
     weightController.text = _productQuantities[title]!.value.toStringAsFixed(2);
 
     return SizedBox(
-      width: (MediaQuery.of(context).size.width - 48) /
-          2, // Adjust width for two columns
+      width: isMobile
+          ? MediaQuery.of(context).size.width * 0.9
+          : (MediaQuery.of(context).size.width - 48) / 2,
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: isMobile
+              ? const EdgeInsets.all(10.0)
+              : const EdgeInsets.all(20.0),
           child: Column(
             children: [
               Row(
                 children: [
                   Expanded(
-                    flex: 3,
+                    flex: isMobile ? 4 : 3,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.all(Radius.circular(10)),
                       child: Image.network(
                         imageUrl,
-                        height: 150, // Set height to match the content
-                        fit: BoxFit.cover, // Cover the entire available space
+                        height: isMobile ? 100 : 150,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    flex: 3,
+                    flex: isMobile ? 6 : 3,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
-                            fontSize: 20,
+                          style: TextStyle(
+                            fontSize: isMobile ? 16 : 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.black,
                           ),
@@ -764,27 +842,41 @@ class _BookingScreenState extends State<BookingScreen> {
                         Text(
                           description,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: isMobile ? 12 : 14,
                             color: Colors.grey[700],
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                  if (!isMobile)
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                        textAlign: TextAlign.end,
                       ),
-                      textAlign: TextAlign.end,
                     ),
-                  ),
                 ],
               ),
+              if (isMobile)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               Divider(thickness: 1, color: Colors.green[100]),
               ValueListenableBuilder<double>(
                 valueListenable: _productQuantities[title]!,
@@ -815,8 +907,9 @@ class _BookingScreenState extends State<BookingScreen> {
                         height: 40,
                         child: TextField(
                           controller: weightController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                                  decimal: true),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
@@ -860,14 +953,14 @@ class _BookingScreenState extends State<BookingScreen> {
                           Text(
                             'Estimated Profit',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: isMobile ? 14 : 16,
                               color: Colors.grey[700],
                             ),
                           ),
                           Text(
                             '₱ ${(pricePerKg * weight).toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 18,
+                            style: TextStyle(
+                              fontSize: isMobile ? 16 : 18,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                             ),
@@ -949,8 +1042,8 @@ class _BookingScreenState extends State<BookingScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
-              child: const Text('Login Now',
-                  style: TextStyle(color: Colors.white)),
+              child:
+                  const Text('Login Now', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),

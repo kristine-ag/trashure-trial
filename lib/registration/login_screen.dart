@@ -70,6 +70,24 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           );
           await FirebaseAuth.instance.signOut(); // Sign out the user
+        } else {
+          // Email verified, proceed with login
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Login Successful'),
+              content: Text('You have successfully logged in.'),
+              actions: [
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _redirectToLastRoute(); // Navigate to the last route or home page
+                  },
+                ),
+              ],
+            ),
+          );
         }
       } on FirebaseAuthException catch (e) {
         String message;

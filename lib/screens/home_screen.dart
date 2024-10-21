@@ -80,7 +80,7 @@ class HomeScreen extends StatelessWidget {
                     'Join the solution with Trashure:',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24, // Reduce font size for smaller screens
+                      fontSize: 30, // Reduce font size for smaller screens
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -90,7 +90,7 @@ class HomeScreen extends StatelessWidget {
                     'Sell your segregated trash and earn money.',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 20, // Adjust font size
+                      fontSize: 24, // Adjust font size
                       fontWeight: FontWeight.normal,
                     ),
                     textAlign: TextAlign.center,
@@ -100,7 +100,7 @@ class HomeScreen extends StatelessWidget {
                     'Together, we can create a cleaner, greener planet!',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 20, // Adjust font size
+                      fontSize: 24, // Adjust font size
                       fontWeight: FontWeight.normal,
                     ),
                     textAlign: TextAlign.center,

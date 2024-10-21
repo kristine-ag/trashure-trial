@@ -16,6 +16,9 @@ class _PricingScreenState extends State<PricingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600; // Define the threshold for mobile view
+
     return Scaffold(
       appBar: CustomAppBar(),
       body: SingleChildScrollView(
@@ -24,11 +27,11 @@ class _PricingScreenState extends State<PricingScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              _buildCategorySection(context, 'PLASTICS', 'plastics'),
+              _buildCategorySection(context, 'PLASTICS', 'plastics', isMobile),
               const SizedBox(height: 40),
-              _buildCategorySection(context, 'METALS', 'metals'),
+              _buildCategorySection(context, 'METALS', 'metals', isMobile),
               const SizedBox(height: 40),
-              _buildCategorySection(context, 'GLASS', 'glass'),
+              _buildCategorySection(context, 'GLASS', 'glass', isMobile),
             ],
           ),
         ),
@@ -36,13 +39,13 @@ class _PricingScreenState extends State<PricingScreen> {
     );
   }
 
-  Widget _buildCategorySection(BuildContext context, String title, String category) {
+  Widget _buildCategorySection(BuildContext context, String title, String category, bool isMobile) {
     return Column(
       children: [
         Text(
           title,
           style: TextStyle(
-            fontSize: 32,
+            fontSize: isMobile ? 24 : 32, // Adjust text size for mobile
             fontWeight: FontWeight.bold,
             color: Colors.green[700],
           ),
@@ -50,7 +53,7 @@ class _PricingScreenState extends State<PricingScreen> {
         const SizedBox(height: 10),
         _buildDivider(),
         const SizedBox(height: 20),
-        _buildProductCategory(context, category),
+        _buildProductCategory(context, category, isMobile),
       ],
     );
   }
@@ -64,7 +67,7 @@ class _PricingScreenState extends State<PricingScreen> {
     );
   }
 
-  Widget _buildProductCategory(BuildContext context, String category) {
+  Widget _buildProductCategory(BuildContext context, String category, bool isMobile) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('products')
@@ -82,11 +85,10 @@ class _PricingScreenState extends State<PricingScreen> {
           return const Text('No products available in this category.');
         }
 
-        // Group cards in pairs of two for a row layout
+        // Group cards in pairs of two for a row layout, use one card per row for mobile
         List<Widget> rows = [];
-        for (int i = 0; i < products.length; i += 2) {
-          // If there's only one item left, add an Expanded with an empty Container for the second column
-          if (i + 1 < products.length) {
+        for (int i = 0; i < products.length; i += (isMobile ? 1 : 2)) {
+          if (i + 1 < products.length && !isMobile) {
             rows.add(
               Row(
                 children: [
@@ -101,8 +103,10 @@ class _PricingScreenState extends State<PricingScreen> {
               Row(
                 children: [
                   Expanded(child: _buildProductCard(context, products[i])),
-                  const SizedBox(width: 10),
-                  Expanded(child: Container()), // Empty container for balance
+                  if (!isMobile)
+                    const SizedBox(width: 10),
+                  if (!isMobile)
+                    Expanded(child: Container()), // Empty container for balance in non-mobile
                 ],
               ),
             );
