@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // For Firebase Storage
 import 'package:trashure/components/appbar.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart'; // For address handling
@@ -22,33 +23,18 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  // Variables for product selection
-  bool _showAllPlastics = false;
-  bool _showAllMetals = false;
-  bool _showAllGlass = false;
-
   final user = FirebaseAuth.instance.currentUser;
-
-  // Map to track quantities for products dynamically (now using double)
   final Map<String, ValueNotifier<double>> _productQuantities = {};
-
-  // Map to track product prices dynamically
   final Map<String, double> _productPrices = {};
-
-  // Map to track product timestamps dynamically
   final Map<String, Timestamp> _productTimestamps = {};
-
-  // Map to track product descriptions dynamically
   final Map<String, String> _productDescriptions = {};
-
-  // Map to track product images dynamically
+  final Map<String, String> _productCategories = {};
+  final Map<String, String> _productIds = {};
   final Map<String, String> _productImages = {};
 
-  // ValueNotifier to track total estimated profit
   final ValueNotifier<double> _totalEstimatedProfit =
       ValueNotifier<double>(0.0);
 
-  // Variables for address confirmation
   GoogleMapController? mapController;
   final Set<Marker> _markers = {};
   LatLng? currentPosition;
@@ -58,9 +44,9 @@ class _BookingScreenState extends State<BookingScreen> {
       TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
   final TextEditingController _contactController =
-      TextEditingController(); // Controller for phone number
+      TextEditingController();
 
-  bool _canBook = true; // Variable to track if the user can book
+  bool _canBook = true;
 
   @override
   void initState() {
@@ -74,7 +60,6 @@ class _BookingScreenState extends State<BookingScreen> {
 
   @override
   void dispose() {
-    // Dispose product selection controllers if any
     _defaultAddressController.dispose();
     _landmarkController.dispose();
     _contactController.dispose(); // Dispose the contact controller
@@ -264,7 +249,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
         if (userDocSnapshot.exists) {
           String userStatus = userDocSnapshot['status'] ?? '';
-          if (userStatus == 'booked') {
+          if (userStatus == 'scheduled') {
             return true; // User has a pending booking
           }
         }
@@ -331,189 +316,211 @@ class _BookingScreenState extends State<BookingScreen> {
       builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 600;
 
-        return DefaultTabController(
-          length: 3, // Number of tabs
-          child: Scaffold(
-            appBar: CustomAppBar(),
-            body: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Product Selection Section
-                  _buildSectionTitle('SELECT YOUR RECYCLABLES'),
-                  const SizedBox(height: 10),
-                  Container(
-                    height: 4,
-                    width: isMobile ? MediaQuery.of(context).size.width * 0.8 : 400,
-                    color: Colors.green[700],
-                  ),
-                  const SizedBox(height: 20),
-                  // Tabs
-                  Container(
-                    color: Colors.green[100],
-                    child: TabBar(
-                      indicatorColor: Colors.green[700],
-                      labelColor: Colors.green[700],
-                      unselectedLabelColor: Colors.black54,
-                      tabs: [
-                        Tab(text: 'Plastics'),
-                        Tab(text: 'Metals'),
-                        Tab(text: 'Glass'),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    height: isMobile ? 800 : 600, // Adjust height as needed
-                    child: TabBarView(
-                      children: [
-                        // Plastics Tab
-                        _buildProductsSection(context, 'plastics', _showAllPlastics,
-                            () {
-                          setState(() {
-                            _showAllPlastics = !_showAllPlastics;
-                          });
-                        }, isMobile),
-                        // Metals Tab
-                        _buildProductsSection(context, 'metals', _showAllMetals,
-                            () {
-                          setState(() {
-                            _showAllMetals = !_showAllMetals;
-                          });
-                        }, isMobile),
-                        // Glass Tab
-                        _buildProductsSection(context, 'glass', _showAllGlass, () {
-                          setState(() {
-                            _showAllGlass = !_showAllGlass;
-                          });
-                        }, isMobile),
-                      ],
-                    ),
-                  ),
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('category').snapshots(),
+          builder: (context, categorySnapshot) {
+            if (categorySnapshot.hasError) {
+              return const Text('Error loading categories');
+            }
 
-                  // Display Total Estimated Profit
-                  ValueListenableBuilder<double>(
-                    valueListenable: _totalEstimatedProfit,
-                    builder: (context, totalProfit, child) {
-                      return Text(
-                        'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              totalProfit >= 50.0 ? Colors.green[700] : Colors.red,
+            final categories = categorySnapshot.data?.docs ?? [];
+
+            return DefaultTabController(
+              length: categories
+                  .length, // Dynamically set the number of tabs based on categories
+              child: Scaffold(
+                appBar: CustomAppBar(),
+                body: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Product Selection Section
+                      _buildSectionTitle('SELECT YOUR RECYCLABLES'),
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 4,
+                        width: isMobile
+                            ? MediaQuery.of(context).size.width * 0.8
+                            : 400,
+                        color: Colors.green[700],
+                      ),
+                      const SizedBox(height: 20),
+                      // Tabs
+                      Container(
+                        color: Colors.green[100],
+                        child: TabBar(
+                          indicatorColor: Colors.green[700],
+                          labelColor: Colors.green[700],
+                          unselectedLabelColor: Colors.black54,
+                          tabs: categories.map((categoryDoc) {
+                            return Tab(
+                                text: categoryDoc[
+                                    'category_name']); // Each tab title is based on category name
+                          }).toList(),
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Address Confirmation Section
-                  _buildSectionTitle('CONFIRM YOUR ADDRESS'),
-                  const SizedBox(height: 10),
-                  Container(
-                    height: 4,
-                    width: isMobile ? MediaQuery.of(context).size.width * 0.8 : 400,
-                    color: Colors.green[700],
-                  ),
-                  const SizedBox(height: 20),
-                  _buildAddressSection(context, isMobile),
-                  const SizedBox(height: 20),
-                  // Next Button
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (_totalEstimatedProfit.value < 50.0) {
-                        // Show prompt
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Please add more recyclables to reach the minimum amount of ₱50.',
+                      ),
+                      Container(
+                        height: isMobile ? 800 : 600, // Adjust height as needed
+                        child: TabBarView(
+                          children: categories.map((categoryDoc) {
+                            final categoryName = categoryDoc[
+                                'category_name']; // Get the name of the category
+                            return _buildProductsSection(
+                                context, categoryName, isMobile);
+                          }).toList(),
+                        ),
+                      ),
+                      // Display Total Estimated Profit
+                      Column(
+                        children: [
+                          Text(
+                            'Minimum booking amount: ₱200',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[700],
                             ),
                           ),
-                        );
-                        return;
-                      }
-
-                      // Collect selected items
-                      Map<String, dynamic> selectedItems = {};
-
-                      _productQuantities.forEach((productName, notifier) {
-                        if (notifier.value > 0) {
-                          final productPrice = _productPrices[productName];
-                          final priceTimestamp = _productTimestamps[productName];
-                          final productDescription =
-                              _productDescriptions[productName];
-                          final productImage = _productImages[productName];
-
-                          selectedItems[productName] = {
-                            'weight': notifier.value,
-                            'price_per_kg': productPrice,
-                            'total_price': notifier.value * productPrice!,
-                            'price_timestamp': priceTimestamp,
-                            'description': productDescription,
-                            'image': productImage,
-                          };
-                        }
-                      });
-
-                      if (selectedItems.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Please select at least one item.')),
-                        );
-                        return;
-                      }
-
-                      final address = _defaultAddressController.text;
-                      final landmark = _landmarkController.text;
-                      final contact = _contactController.text;
-                      final fullAddress = '$address, Landmark: $landmark';
-
-                      // Optionally, update Firestore with the new data
-                      if (user != null) {
-                        try {
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user!.uid)
-                              .update({
-                            'address': address,
-                            'landmark': landmark,
-                            'contact': contact,
-                            'location': GeoPoint(currentPosition?.latitude ?? 0.0,
-                                currentPosition?.longitude ?? 0.0),
-                          });
-                        } catch (e) {
-                          print('Error updating Firestore: $e');
-                        }
-                      }
-
-                      // Navigate to BookingPreviewScreen
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => BookingPreviewScreen(
-                            selectedItems: selectedItems,
-                            address: fullAddress,
-                            contact: contact,
+                          const SizedBox(height: 5),
+                          ValueListenableBuilder<double>(
+                            valueListenable: _totalEstimatedProfit,
+                            builder: (context, totalProfit, child) {
+                              return Text(
+                                'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: totalProfit >= 150.0
+                                      ? Colors.green[700]
+                                      : Colors.red,
+                                ),
+                              );
+                            },
                           ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 50),
+                      _buildSectionTitle('VERIFY YOUR ADDRESS'),
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 4,
+                        width: isMobile
+                            ? MediaQuery.of(context).size.width * 0.8
+                            : 400,
+                        color: Colors.green[700],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildAddressSection(context, isMobile),
+                      const SizedBox(height: 20),
+                      // Next Button
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (_totalEstimatedProfit.value < 200.0) {
+                            // Show prompt
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Please add more recyclables to reach the minimum amount of ₱200.'),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // Collect selected items
+                          Map<String, dynamic> selectedItems = {};
+
+                          _productQuantities.forEach((productName, notifier) {
+                            if (notifier.value > 0) {
+                              final productPrice = _productPrices[productName];
+                              final priceTimestamp =
+                                  _productTimestamps[productName];
+                              final productDescription =
+                                  _productDescriptions[productName];
+                              final productImage = _productImages[productName];
+                              final productCategory = _productCategories[
+                                  productName]; // Fetch stored category
+                              final productId = _productIds[
+                                  productName]; // Fetch stored document ID
+
+                              selectedItems[productName] = {
+                                'weight': notifier.value,
+                                'price_per_kg': productPrice,
+                                'total_price': notifier.value * productPrice!,
+                                'price_timestamp': priceTimestamp,
+                                'description': productDescription,
+                                'image': productImage,
+                                'category': productCategory, // New field
+                                'product_Id': productId, // New field
+                              };
+                            }
+                          });
+
+                          if (selectedItems.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content:
+                                      Text('Please select at least one item.')),
+                            );
+                            return;
+                          }
+
+                          final address = _defaultAddressController.text;
+                          final landmark = _landmarkController.text;
+                          final contact = _contactController.text;
+                          final fullAddress = '$address, Landmark: $landmark';
+
+                          // Optionally, update Firestore with the new data
+                          if (user != null) {
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(user!.uid)
+                                  .update({
+                                'address': address,
+                                'landmark': landmark,
+                                'contact': contact,
+                                'location': GeoPoint(
+                                    currentPosition?.latitude ?? 0.0,
+                                    currentPosition?.longitude ?? 0.0),
+                              });
+                            } catch (e) {
+                              print('Error updating Firestore: $e');
+                            }
+                          }
+
+                          // Navigate to BookingPreviewScreen with the selected items
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BookingPreviewScreen(
+                                selectedItems: selectedItems,
+                                address: fullAddress,
+                                contact: contact,
+                              ),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green[700],
+                          padding: isMobile
+                              ? const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12)
+                              : const EdgeInsets.symmetric(
+                                  horizontal: 32, vertical: 16),
                         ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[700],
-                      padding: isMobile
-                          ? const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12)
-                          : const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 16),
-                    ),
-                    child: const Text('Next', style: TextStyle(color: Colors.white)),
+                        child: const Text('Next',
+                            style: TextStyle(color: Colors.white)),
+                      ),
+
+                      const SizedBox(height: 20),
+                      const Footer(),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                  const Footer(),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -544,7 +551,8 @@ class _BookingScreenState extends State<BookingScreen> {
                 markers: _markers,
                 onTap: (LatLng position) async {
                   // Add marker on the map at the tapped location
-                  _addMarker(position, '${position.latitude}, ${position.longitude}');
+                  _addMarker(
+                      position, '${position.latitude}, ${position.longitude}');
 
                   // Fetch address from LatLng and update the address field
                   await _getAddressFromLatLng(position);
@@ -587,8 +595,8 @@ class _BookingScreenState extends State<BookingScreen> {
                   markers: _markers,
                   onTap: (LatLng position) async {
                     // Add marker on the map at the tapped location
-                    _addMarker(
-                        position, '${position.latitude}, ${position.longitude}');
+                    _addMarker(position,
+                        '${position.latitude}, ${position.longitude}');
 
                     // Fetch address from LatLng and update the address field
                     await _getAddressFromLatLng(position);
@@ -677,117 +685,106 @@ class _BookingScreenState extends State<BookingScreen> {
 
   // Product selection methods
   Widget _buildProductsSection(
-  BuildContext context,
-  String category,
-  bool showAll,
-  VoidCallback toggleShowAll,
-  bool isMobile,
-) {
-  return StreamBuilder<QuerySnapshot>(
-    stream: FirebaseFirestore.instance
-        .collection('products')
-        .where('category', isEqualTo: category)
-        .snapshots(),
-    builder: (context, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return const CircularProgressIndicator();
-      }
+    BuildContext context,
+    String category,
+    bool isMobile,
+  ) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('products')
+          .where('category', isEqualTo: category)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Error loading products');
+        }
 
-      if (snapshot.hasError) {
-        return const Text('Error loading products');
-      }
+        final products = snapshot.data?.docs ?? [];
 
-      final products = snapshot.data?.docs ?? [];
+        if (products.isEmpty) {
+          return const Text('No products available in this category.');
+        }
 
-      if (products.isEmpty) {
-        return const Text('No products available in this category.');
-      }
+        return SingleChildScrollView(
+          child: Wrap(
+            spacing: 16.0,
+            runSpacing: 16.0,
+            children: products.map((productDoc) {
+              final productData = productDoc.data() as Map<String, dynamic>;
+              final productName = productData['product_name'].toUpperCase();
+              final productDescription = productData['details'];
+              final productImageFile = productData['picture'];
+              final productCategory = productData['category']; // Fetch category
+              final productId = productDoc.id; // Fetch document ID
 
-      // Show either 2 cards or all cards based on `showAll`
-      final visibleProducts = showAll ? products : products.take(3).toList();
+              // Save category and product ID for each product name
+              _productCategories[productName] = productCategory;
+              _productIds[productName] = productId;
 
-      return Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Wrap(
-                spacing: 16.0,
-                runSpacing: 16.0,
-                children: visibleProducts.map((productDoc) {
-                  final productData =
-                      productDoc.data() as Map<String, dynamic>;
-                  final productName = productData['product_name'].toUpperCase();
-                  final productDescription = productData['details'];
-                  final productImage = productData['picture'];
+              // Use StreamBuilder to listen for real-time updates to prices
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('products')
+                    .doc(productDoc.id)
+                    .collection('prices')
+                    .orderBy('time', descending: true)
+                    .limit(1)
+                    .snapshots(),
+                builder: (context, priceSnapshot) {
+                  if (!priceSnapshot.hasData ||
+                      priceSnapshot.data!.docs.isEmpty) {
+                    return const Text('Price unavailable');
+                  }
 
-                  // Fetch the latest price from the subcollection "prices"
-                  return FutureBuilder<QuerySnapshot>(
-                    future: FirebaseFirestore.instance
-                        .collection('products')
-                        .doc(productDoc.id)
-                        .collection('prices')
-                        .orderBy('time', descending: true)
-                        .limit(1)
-                        .get(),
-                    builder: (context, priceSnapshot) {
-                      if (!priceSnapshot.hasData ||
-                          priceSnapshot.data!.docs.isEmpty) {
-                        return const Text('Price unavailable');
-                      }
+                  final priceData = priceSnapshot.data!.docs.first.data()
+                      as Map<String, dynamic>;
+                  final productPrice = priceData['price'] as double;
+                  final priceTimestamp = priceData['time'] as Timestamp;
 
-                      final priceData = priceSnapshot.data!.docs.first.data()
-                          as Map<String, dynamic>;
-                      final productPrice = priceData['price'] as double;
-                      final priceTimestamp = priceData['time'] as Timestamp;
+                  // Initialize weight and price for each product if not set
+                  _productQuantities.putIfAbsent(
+                      productName, () => ValueNotifier<double>(0));
+                  _productPrices.putIfAbsent(productName, () => productPrice);
+                  _productTimestamps.putIfAbsent(
+                      productName, () => priceTimestamp);
 
-                      // Initialize weight and price for each product if not set
-                      _productQuantities.putIfAbsent(
-                          productName, () => ValueNotifier<double>(0));
-                      _productPrices.putIfAbsent(productName, () => productPrice);
-                      _productTimestamps.putIfAbsent(
-                          productName, () => priceTimestamp);
+                  // Store product descriptions and images for later use
+                  _productDescriptions.putIfAbsent(
+                      productName, () => productDescription);
+                  _productImages.putIfAbsent(
+                      productName, () => productImageFile);
 
-                      // Store product descriptions and images for later use
-                      _productDescriptions.putIfAbsent(
-                          productName, () => productDescription);
-                      _productImages.putIfAbsent(
-                          productName, () => productImage);
-
-                      return _buildProductCard(
-                        context,
-                        productName,
-                        productDescription,
-                        productPrice,
-                        productImage,
-                        priceTimestamp,
-                        isMobile,
-                      );
-                    },
+                  // Pass category and document ID to _buildProductCard
+                  return _buildProductCard(
+                    context,
+                    productName,
+                    productDescription,
+                    productPrice,
+                    productImageFile,
+                    priceTimestamp,
+                    productCategory, // Pass category
+                    productId, // Pass product ID
+                    isMobile,
                   );
-                }).toList(),
-              ),
-            ),
+                },
+              );
+            }).toList(),
           ),
-          _buildToggleButton(
-            showAll,
-            'See more...',
-            'See less...',
-            toggleShowAll,
-          ),
-        ],
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
-
+  // Build product card with Firebase Storage image
   Widget _buildProductCard(
     BuildContext context,
     String title,
     String description,
     double pricePerKg,
-    String imageUrl,
+    String imageFileName,
     Timestamp priceTimestamp,
+    String category, // New parameter for category
+    String documentId, // New parameter for document ID
     bool isMobile,
   ) {
     // Controller to manage the input for weight
@@ -811,58 +808,75 @@ class _BookingScreenState extends State<BookingScreen> {
               : const EdgeInsets.all(20.0),
           child: Column(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    flex: isMobile ? 4 : 3,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.all(Radius.circular(10)),
-                      child: Image.network(
-                        imageUrl,
-                        height: isMobile ? 100 : 150,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: isMobile ? 6 : 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: isMobile ? 16 : 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
+              FutureBuilder<String>(
+                future: _fetchImageFromFirebaseStorage(
+                    imageFileName), // Fetch image URL
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Text('Error loading image');
+                  }
+                  if (!snapshot.hasData) {
+                    return const Text('Image not available');
+                  }
+
+                  final imageUrl =
+                      snapshot.data!; // URL of the image from Firebase Storage
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        flex: isMobile ? 4 : 3,
+                        child: ClipRRect(
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(10)),
+                          child: Image.network(
+                            imageUrl,
+                            height: isMobile ? 100 : 150,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                        const SizedBox(height: 5),
-                        Text(
-                          description,
-                          style: TextStyle(
-                            fontSize: isMobile ? 12 : 14,
-                            color: Colors.grey[700],
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: isMobile ? 6 : 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: TextStyle(
+                                fontSize: isMobile ? 16 : 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              description,
+                              style: TextStyle(
+                                fontSize: isMobile ? 12 : 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isMobile)
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                            textAlign: TextAlign.end,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  if (!isMobile)
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                        textAlign: TextAlign.end,
-                      ),
-                    ),
-                ],
+                    ],
+                  );
+                },
               ),
               if (isMobile)
                 Padding(
@@ -903,13 +917,12 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       // TextField to input the weight
                       SizedBox(
-                        width: 50,
+                        width: 100,
                         height: 40,
                         child: TextField(
                           controller: weightController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
@@ -919,8 +932,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                           inputFormatters: [
                             FilteringTextInputFormatter.allow(
-                              RegExp(r'^\d+\.?\d{0,2}'),
-                            ),
+                                RegExp(r'^\d+\.?\d{0,2}')),
                           ],
                           onChanged: (value) {
                             // Update the weight value when the text changes
@@ -978,6 +990,19 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
+  // Method to fetch image from Firebase Storage
+  Future<String> _fetchImageFromFirebaseStorage(String fileName) async {
+    try {
+      final ref =
+          FirebaseStorage.instance.ref().child('product_images/$fileName');
+      final imageUrl = await ref.getDownloadURL();
+      return imageUrl;
+    } catch (e) {
+      print('Error fetching image: $e');
+      return ''; // Return an empty string in case of an error
+    }
+  }
+
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(1, 16, 1, 1),
@@ -990,20 +1015,6 @@ class _BookingScreenState extends State<BookingScreen> {
             color: Colors.green[700],
             letterSpacing: 1.5,
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleButton(
-      bool showAll, String moreText, String lessText, VoidCallback onPressed) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: TextButton(
-        onPressed: onPressed,
-        child: Text(
-          showAll ? lessText : moreText,
-          style: TextStyle(color: Colors.green[700]),
         ),
       ),
     );
@@ -1042,8 +1053,8 @@ class _BookingScreenState extends State<BookingScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
-              child:
-                  const Text('Login Now', style: TextStyle(color: Colors.white)),
+              child: const Text('Login Now',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),

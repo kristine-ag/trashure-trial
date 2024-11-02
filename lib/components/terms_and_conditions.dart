@@ -9,69 +9,6 @@ class TermsAndConditionsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String termsContent = '''
-# Steps and Terms and Conditions
-
-## How to Segregate Your Trash and Book a Collection Service
-
-### Step 1: Segregate Your Trash
-
-Proper segregation of trash is essential for efficient recycling and disposal. Follow these guidelines to separate your waste:
-
-#### Biodegradable Waste
-
-- Includes food scraps, garden waste, and other organic materials that decompose naturally.
-- Place in a separate bag or bin labeled "Biodegradable."
-
-#### Non-biodegradable Waste/Recyclables
-
-- Includes plastics, metals, glass, and other materials that do not decompose.
-- Sort into categories:
-  - **Plastic**: bottles, bags, containers.
-  - **Glass**: bottles, jars (be sure to clean these before disposal).
-  - **Metal**: cans, foil, aluminum.
-  - **Paper**: newspapers, magazines, cardboard.
-- Place each type of non-biodegradable waste into separate bags or bins to simplify collection.
-
-#### Hazardous Waste
-
-- Includes batteries, light bulbs, and chemicals.
-- These should be stored safely and disposed of properly through authorized disposal programs (not included in the regular collection service).
-
-### Step 2: Booking a Collection Service
-
-Once you’ve properly segregated your waste, you’re ready to book a collection service through the website. Here’s how it works:
-
-#### Measure Your Recyclables
-
-- Use a weighing scale to measure the weight of your sorted recyclables (plastic, metal, glass, and paper).
-- This step helps us estimate the value of your recyclables before collection.
-
-#### Select Recyclables and Their Weight
-
-- In the website, choose the category of recyclables you have (e.g., plastic, metal, glass).
-- Enter the weight for each category. The website will calculate the estimated value based on current market prices.
-
-#### Choose Your Location
-
-- Input your address or choose from your saved locations. This helps us determine the nearest collection team for your area.
-
-#### Pick a Schedule
-
-- Select a specific date and time for the collection service from the available options.
-- We offer flexible scheduling to fit your convenience.
-- Ensure your recyclables are packed and ready for pickup at the scheduled time.
-
-### Step 3: Collection and Payment
-
-- On the scheduled date, our team will arrive at your location to collect your segregated trash.
-- They will verify the weight and quality of the recyclables, after which the payment will be credited to your website account.
-- You can then request a withdrawal through GCash once you reach the minimum required balance.
-
-‎ 
----
----
-‎ 
-
 ## Terms and Conditions
 
 ### 1. Introduction

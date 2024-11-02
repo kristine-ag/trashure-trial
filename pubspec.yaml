@@ -81,7 +81,8 @@ flutter:
   assets:
     - assets/images/
     - assets/images/signup.png
-    - assets/images/logo.jpg
+    - assets/images/login.jpg
+    - assets/images/logo.png
     - assets/images/banner.jpg
     - assets/images/landing.jpg
     - assets/images/default_avatar.png

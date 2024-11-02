@@ -12,7 +12,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       leading: Padding(
         padding: const EdgeInsets.all(8.0),
-        child: Image.asset('assets/images/logo.jpg'),
+        child: Image.asset('assets/images/logo.png'),
       ),
       title: GestureDetector(
         onTap: () {
@@ -76,14 +76,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.logout, color: Colors.green[700]),
-                      onPressed: () async {
-                        await FirebaseAuth.instance.signOut();
-                        Navigator.pushNamedAndRemoveUntil(
-                            context, '/login', (route) => false);
-                      },
                     ),
                   ],
                 ),

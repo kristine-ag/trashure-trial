@@ -27,7 +27,8 @@ class _BookingPreviewAndScheduleScreenState
   String? selectedBookingId;
   String? selectedSchedule;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  Set<String> userBookedDates = {}; // Stores booking IDs where the user has already booked
+  Set<String> userBookedDates =
+      {}; // Stores booking IDs where the user has already booked
 
   @override
   void initState() {
@@ -35,11 +36,11 @@ class _BookingPreviewAndScheduleScreenState
     fetchUserBookedDates();
   }
 
-  // Function to fetch bookings from Firestore and order them by date
   Stream<QuerySnapshot> fetchBookings() {
+    DateTime currentDate = DateTime.now();
     return FirebaseFirestore.instance
         .collection('bookings')
-        .orderBy('date', descending: false) // Set to true for descending order
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(currentDate))
         .snapshots();
   }
 
@@ -47,7 +48,6 @@ class _BookingPreviewAndScheduleScreenState
   void fetchUserBookedDates() async {
     final User? user = _auth.currentUser;
     if (user == null) {
-      // User not logged in
       return;
     }
     final uid = user.uid;
@@ -60,7 +60,6 @@ class _BookingPreviewAndScheduleScreenState
       DocumentSnapshot userDoc =
           await bookingDoc.reference.collection('users').doc(uid).get();
       if (userDoc.exists) {
-        // User has booked this date
         bookedDates.add(bookingDoc.id);
       }
     }
@@ -70,7 +69,7 @@ class _BookingPreviewAndScheduleScreenState
     });
   }
 
-  // Function to handle booking submission
+// Function to handle booking submission
   Future<void> submitBooking(String bookingId) async {
     try {
       final User? user = _auth.currentUser;
@@ -80,7 +79,7 @@ class _BookingPreviewAndScheduleScreenState
 
       final uid = user.uid;
 
-      // Fetch user data from Firestore (excluding balance)
+      // Retrieve the user's document to add user data to booking
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (!userDoc.exists) {
@@ -88,7 +87,7 @@ class _BookingPreviewAndScheduleScreenState
       }
       final userData = userDoc.data()!;
 
-      // Remove 'balance' field if it exists
+      // Remove sensitive fields if needed
       final filteredUserData = Map<String, dynamic>.from(userData);
       filteredUserData.remove('balance');
 
@@ -96,44 +95,51 @@ class _BookingPreviewAndScheduleScreenState
           FirebaseFirestore.instance.collection('bookings').doc(bookingId);
       final userRef = bookingRef.collection('users').doc(uid);
 
-      // Start a batch to perform multiple writes
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
-      // Add the user data to the sub-collection (excluding 'balance')
+      // Store basic user info in the user document
       batch.set(userRef, filteredUserData);
 
-      // Calculate total_price and total_weight for the user
       double totalUserPrice = 0;
       double totalUserWeight = 0;
 
-      // Loop through the selected items and add each recyclable item, including the calculated item_price and item_weight
+      // Loop through each selected item and add its details to the recyclables subcollection
       for (var entry in widget.selectedItems.entries) {
-        double weight = entry.value['weight'];
-        double pricePerKg = entry.value['price_per_kg'];
-        double itemPrice = weight * pricePerKg; // Calculate item price
-        totalUserPrice += itemPrice; // Add to user's total price
-        totalUserWeight += weight; // Add to user's total weight
+        double weight = entry.value['weight'] ?? 0.0;
+        double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
+        double itemPrice = weight * pricePerKg;
+        totalUserPrice += itemPrice;
+        totalUserWeight += weight;
 
-        // Add recyclables to user's sub-collection
+        // New fields for category and documentId, with default values if null
+        String category = entry.value['category'] ?? 'Unknown Category';
+        String documentId = entry.value['product_Id'] ?? 'Unknown ID';
+
+        // Add each recyclable item with the additional fields
         batch.set(userRef.collection('recyclables').doc(), {
           'type': entry.key,
-          'weight': weight, // Add item_weight field
+          'weight': weight,
           'price': pricePerKg,
-          'item_price': itemPrice, // Add item_price field
-          'timestamp': (entry.value['price_timestamp'] as Timestamp).toDate(),
+          'item_price': itemPrice,
+          'timestamp':
+              (entry.value['price_timestamp'] as Timestamp?)?.toDate() ??
+                  DateTime.now(),
+          'category': category, // Added category
+          'product_Id': documentId, // Added documentId
         });
       }
 
-      // Add total_price and total_weight to the user document
+      // Update user document with total price and weight
       batch.update(userRef, {
-        'total_price': totalUserPrice,
-        'total_weight': totalUserWeight,
-        'status': "booked" 
+        'total_price': double.parse(totalUserPrice.toStringAsFixed(2)),
+        'total_weight': double.parse(totalUserWeight.toStringAsFixed(2)),
+        'status': "booked"
       });
 
+      // Commit all the changes
       await batch.commit();
 
-      // Now, calculate the overall price and overall weight 
+      // Calculate and update the booking document's overall price and weight
       final usersSnapshot = await bookingRef.collection('users').get();
       double overallPrice = 0;
       double overallWeight = 0;
@@ -143,18 +149,15 @@ class _BookingPreviewAndScheduleScreenState
         overallWeight += userData['total_weight'] ?? 0;
       }
 
-      // Update the overall_price and overall_weight fields in the bookings document
       await bookingRef.update({
         'overall_price': overallPrice,
-        'overall_weight': overallWeight, // Add overall_weight field
+        'overall_weight': overallWeight,
       });
 
-      // Show a confirmation message and navigate to BookingConfirmedScreen
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Booking confirmed!')),
       );
 
-      // Navigate to Booking Confirmed Screen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const BookingConfirmedScreen()),
@@ -168,17 +171,15 @@ class _BookingPreviewAndScheduleScreenState
 
   @override
   Widget build(BuildContext context) {
-    // Calculate the total weight and total price of the selected items
     double totalWeight =
         widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      // Use null-aware operators to safely handle null values
-      double itemWeight = (element.value['weight'] ?? 0.0) * 1.0;
+      double itemWeight = (element.value['final_weight'] ?? 0.0) * 1.0;
       return previousValue + itemWeight;
     });
 
     double totalPrice =
         widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      double itemPrice = (element.value['weight'] ?? 0.0) *
+      double itemPrice = (element.value['final_weight'] ?? 0.0) *
           (element.value['price_per_kg'] ?? 0.0);
       return previousValue + itemPrice;
     });
@@ -192,26 +193,18 @@ class _BookingPreviewAndScheduleScreenState
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title and separator
                 const SizedBox(height: 20),
                 _buildSectionTitle('BOOKING PREVIEW'),
                 const SizedBox(height: 30),
-
-                // Handle layout based on screen width
                 if (constraints.maxWidth > 800)
-                  // For larger screens, display cards in a Row (side by side)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Selected Items takes 60% of the screen
                       Flexible(
                         flex: 6,
                         child: _buildSelectedItemsWithPrices(),
                       ),
-                      const SizedBox(
-                          width: 20), // Add spacing between the cards
-
-                      // Address Card takes 40% of the screen
+                      const SizedBox(width: 20),
                       Flexible(
                         flex: 4,
                         child: _buildAddressCard(context),
@@ -219,7 +212,6 @@ class _BookingPreviewAndScheduleScreenState
                     ],
                   )
                 else
-                  // For smaller screens, stack them vertically
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -229,26 +221,14 @@ class _BookingPreviewAndScheduleScreenState
                     ],
                   ),
                 const SizedBox(height: 30),
-
-                // Total Weight and Price Section
                 _buildTotalWeightAndPriceSection(totalWeight, totalPrice),
-
                 const SizedBox(height: 50),
-
-                // Schedule Selection
                 _buildSectionTitle('BOOKING SCHEDULE'),
-
                 const SizedBox(height: 30),
                 _buildScheduleSection(),
-
                 const SizedBox(height: 30),
-
-                // Book Now Button
                 _buildBookNowButton(context),
-
                 const SizedBox(height: 40),
-
-                // Footer
                 _buildFooter(context),
               ],
             );
@@ -258,9 +238,8 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  // Widget to display selected items along with their quantities, prices, and total price per item
   Widget _buildSelectedItemsWithPrices() {
-    double totalEstimatedProfit = 0.0; // Initialize total estimated profit
+    double totalEstimatedProfit = 0.0;
 
     return Card(
       elevation: 5,
@@ -279,15 +258,12 @@ class _BookingPreviewAndScheduleScreenState
             ),
             const SizedBox(height: 10),
             ...widget.selectedItems.entries.map((entry) {
-              double itemWeight =
-                  entry.value['weight'] ?? 0.0; // Handle null weight
-              double pricePerKg =
-                  entry.value['price_per_kg'] ?? 0.0; // Handle null price
+              double itemWeight = entry.value['weight'] ?? 0.0;
+              double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
               double totalPriceForItem = itemWeight * pricePerKg;
               String description =
                   entry.value['description'] ?? 'No description available';
 
-              // Add to total estimated profit
               totalEstimatedProfit += totalPriceForItem;
 
               return Padding(
@@ -296,7 +272,6 @@ class _BookingPreviewAndScheduleScreenState
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      // Use Expanded to prevent overflow
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -356,7 +331,6 @@ class _BookingPreviewAndScheduleScreenState
               thickness: 1,
               color: Colors.grey,
             ),
-            // Display Total Estimated Profit
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -383,7 +357,6 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  // Widget to display address details
   Widget _buildAddressCard(BuildContext context) {
     return Card(
       elevation: 5,
@@ -421,7 +394,7 @@ class _BookingPreviewAndScheduleScreenState
             Text(
               widget.address.split(', Landmark: ').length > 1
                   ? widget.address.split(', Landmark: ')[1]
-                  : 'N/A', // Display landmark if available
+                  : 'N/A',
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w400,
@@ -451,7 +424,6 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  // Widget to display total weight and total price
   Widget _buildTotalWeightAndPriceSection(
       double totalWeight, double totalPrice) {
     return Container(
@@ -508,7 +480,6 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  // Widget to build the schedule selection section
   Widget _buildScheduleSection() {
     return StreamBuilder<QuerySnapshot>(
       stream: fetchBookings(),
@@ -518,6 +489,7 @@ class _BookingPreviewAndScheduleScreenState
         }
 
         if (snapshot.hasError) {
+          print('Error fetching bookings: ${snapshot.error}');
           return const Text('Error fetching bookings.');
         }
 
@@ -556,6 +528,9 @@ class _BookingPreviewAndScheduleScreenState
                         DateFormat('EEEE').format(bookingDate);
                     final String bookingId = bookingDoc.id;
 
+                    final String? startTime = bookingData['start_time'];
+                    final String? endTime = bookingData['end_time'];
+
                     bool isAlreadyBooked = userBookedDates.contains(bookingId);
 
                     return _buildBookingCard(
@@ -564,6 +539,8 @@ class _BookingPreviewAndScheduleScreenState
                       formattedDate,
                       weekday,
                       isAlreadyBooked,
+                      startTime,
+                      endTime,
                     );
                   }).toList(),
                 ),
@@ -581,6 +558,8 @@ class _BookingPreviewAndScheduleScreenState
     String date,
     String weekday,
     bool isAlreadyBooked,
+    String? startTime,
+    String? endTime,
   ) {
     final isSelected = selectedBookingId == bookingId;
 
@@ -634,6 +613,16 @@ class _BookingPreviewAndScheduleScreenState
                         color: Colors.grey[700],
                       ),
                     ),
+                    if (startTime != null && endTime != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        'Time: $startTime - $endTime',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    ],
                     if (isAlreadyBooked) ...[
                       const SizedBox(height: 5),
                       Text(
@@ -668,7 +657,6 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  // Book Now Button
   Widget _buildBookNowButton(BuildContext context) {
     return Center(
       child: ElevatedButton(
@@ -723,7 +711,6 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  // Footer widget
   Widget _buildFooter(BuildContext context) {
     return Center(
       child: Column(
