@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:trashure/components/booking_selection.dart';
 import 'package:trashure/screens/booking_screen.dart';
 import 'package:trashure/screens/pricing_screen.dart';
 import 'package:trashure/screens/profile_screen.dart';
@@ -36,7 +37,7 @@ class MyApp extends StatelessWidget {
         '/Home': (context) => HomeScreen(),
         '/signup': (context) => SignupScreen(),
         '/login': (context) => LoginScreen(),
-        '/Book': (context) => BookingScreen(),
+        '/Book': (context) => SelectionScreen(),
         '/Pricing': (context) => PricingScreen(),
         '/Profile': (context) => ProfileScreen(),
 

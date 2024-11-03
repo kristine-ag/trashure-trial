@@ -17,6 +17,7 @@ class ContactSetupScreen extends StatefulWidget {
 }
 
 class _ContactSetupScreenState extends State<ContactSetupScreen> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _contactController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
@@ -26,8 +27,17 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
   String? _selectedArea;
   final Set<Marker> _markers = {};
   final List<String> _areas = [
-    'POBLACION', 'TALOMO', 'AGDAO', 'BUHANGIN', 'BUNAWAN',
-    'PAQUIBATO', 'BAGUIO', 'CALINAN', 'MARILOG', 'TORIL', 'TUGBOK'
+    'POBLACION',
+    'TALOMO',
+    'AGDAO',
+    'BUHANGIN',
+    'BUNAWAN',
+    'PAQUIBATO',
+    'BAGUIO',
+    'CALINAN',
+    'MARILOG',
+    'TORIL',
+    'TUGBOK'
   ];
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
 
@@ -39,7 +49,6 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     super.dispose();
   }
 
-  // Method to get the address from LatLng using geocoding with retry and fallback
   Future<void> _getAddressFromLatLng(LatLng position) async {
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(
@@ -64,7 +73,6 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     }
   }
 
-  // Fallback method to fetch address from Google Maps Geocoding API
   Future<void> _fetchAddressUsingGoogleAPI(LatLng position) async {
     final String url =
         'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
@@ -88,13 +96,11 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     }
   }
 
-  // Update the address and area in the UI
   void _updateAddressAndArea(String formattedAddress) {
     setState(() {
       currentAddress = formattedAddress;
       _addressController.text = formattedAddress;
 
-      // Check for any area match and set it as the default in the dropdown
       for (var area in _areas) {
         if (formattedAddress.toUpperCase().contains(area)) {
           _selectedArea = area;
@@ -104,7 +110,6 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     });
   }
 
-  // Show alert dialog for error messages
   void _showAlertDialog(String message) {
     showDialog(
       context: context,
@@ -121,7 +126,6 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     );
   }
 
-  // Add a marker on the map
   void _addMarker(LatLng position, String address) {
     setState(() {
       _markers.clear();
@@ -137,26 +141,29 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
   }
 
   Future<void> _saveContactInfo() async {
+    if (_formKey.currentState?.validate() != true) {
+      // Show an error message if form validation fails
+      _showAlertDialog('Please complete all required fields.');
+      return;
+    }
+
     if (_contactController.text.isEmpty) {
       _showAlertDialog('Please enter your contact number.');
       return;
     }
 
-    // Ensure we're working with the currently logged-in user
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set({
-            'contact': _contactController.text,
-            'address': _addressController.text,
-            'landmark': _landmarkController.text,
-            'location': _selectedLocation != null
-                ? GeoPoint(_selectedLocation!.latitude, _selectedLocation!.longitude)
-                : null,
-            'area': _selectedArea?.toLowerCase(),
-          }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'contact': _contactController.text,
+        'address': _addressController.text,
+        'landmark': _landmarkController.text,
+        'location': _selectedLocation != null
+            ? GeoPoint(
+                _selectedLocation!.latitude, _selectedLocation!.longitude)
+            : null,
+        'area': _selectedArea?.toLowerCase(),
+      }, SetOptions(merge: true));
     } else {
       _showAlertDialog("User not logged in. Please log in and try again.");
     }
@@ -177,75 +184,88 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
             child: isWideScreen
                 ? Row(
                     children: [
-                      // Left section with form fields
                       Expanded(
                         flex: 4,
                         child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              TextField(
-                                controller: _contactController,
-                                decoration: InputDecoration(
-                                  labelText: 'Contact Number',
-                                  border: OutlineInputBorder(),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  controller: _contactController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Contact Number',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your contact number';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                                keyboardType: TextInputType.phone,
-                              ),
-                              const SizedBox(height: 16.0),
-                              TextField(
-                                controller: _addressController,
-                                decoration: InputDecoration(
-                                  labelText: 'Address',
-                                  border: OutlineInputBorder(),
+                                const SizedBox(height: 16.0),
+                                TextFormField(
+                                  controller: _addressController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Address',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onFieldSubmitted: (value) {
+                                    _getLatLngFromAddress(
+                                        value);
+                                  },
                                 ),
-                                onSubmitted: (value) {
-                                  // Parse the address to coordinates
-                                  _getLatLngFromAddress(value);
-                                },
-                              ),
-                              const SizedBox(height: 16.0),
-                              TextField(
-                                controller: _landmarkController,
-                                decoration: InputDecoration(
-                                  labelText: 'Landmark (e.g., House number)',
-                                  border: OutlineInputBorder(),
+                                const SizedBox(height: 16.0),
+                                TextFormField(
+                                  controller: _landmarkController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Landmark (e.g., House number)',
+                                    border: OutlineInputBorder(),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 16.0),
-                              DropdownButtonFormField<String>(
-                                value: _selectedArea,
-                                items: _areas
-                                    .map((area) => DropdownMenuItem(
-                                          value: area,
-                                          child: Text(area),
-                                        ))
-                                    .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _selectedArea = value;
-                                  });
-                                },
-                                decoration: InputDecoration(
-                                  labelText: 'District',
-                                  border: OutlineInputBorder(),
+                                const SizedBox(height: 16.0),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedArea,
+                                  items: _areas
+                                      .map((area) => DropdownMenuItem(
+                                            value: area,
+                                            child: Text(area),
+                                          ))
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedArea = value;
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'District',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please select a district';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                              ),
-                              const SizedBox(height: 20.0),
-                              ElevatedButton(
-                                onPressed: _saveContactInfo,
-                                child: Text('Save'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal[800],
-                                  minimumSize: Size(double.infinity, 50),
+                                const SizedBox(height: 20.0),
+                                ElevatedButton(
+                                  onPressed: _saveContactInfo,
+                                  child: Text('Save'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.teal[800],
+                                    minimumSize: Size(double.infinity, 50),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 16.0),
-                      // Right section with map
                       Expanded(
                         flex: 6,
                         child: Container(
@@ -263,7 +283,8 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                             ),
                             markers: _markers,
                             onTap: (LatLng position) async {
-                              _addMarker(position, '${position.latitude}, ${position.longitude}');
+                              _addMarker(position,
+                                  '${position.latitude}, ${position.longitude}');
                               await _getAddressFromLatLng(position);
                               setState(() {
                                 _selectedLocation = position;
@@ -278,65 +299,81 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                     children: [
                       Expanded(
                         child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              TextField(
-                                controller: _contactController,
-                                decoration: InputDecoration(
-                                  labelText: 'Contact Number',
-                                  border: OutlineInputBorder(),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  controller: _contactController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Contact Number',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your contact number';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                                keyboardType: TextInputType.phone,
-                              ),
-                              const SizedBox(height: 16.0),
-                              TextField(
-                                controller: _addressController,
-                                decoration: InputDecoration(
-                                  labelText: 'Address',
-                                  border: OutlineInputBorder(),
+                                const SizedBox(height: 16.0),
+                                TextFormField(
+                                  controller: _addressController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Address',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onFieldSubmitted: (value) {
+                                    _getLatLngFromAddress(
+                                        value); // Call your method when Enter is pressed
+                                  },
                                 ),
-                                onSubmitted: (value) {
-                                  _getLatLngFromAddress(value);
-                                },
-                              ),
-                              const SizedBox(height: 16.0),
-                              TextField(
-                                controller: _landmarkController,
-                                decoration: InputDecoration(
-                                  labelText: 'Landmark (e.g., House number)',
-                                  border: OutlineInputBorder(),
+                                const SizedBox(height: 16.0),
+                                TextFormField(
+                                  controller: _landmarkController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Landmark (e.g., House number)',
+                                    border: OutlineInputBorder(),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 16.0),
-                              DropdownButtonFormField<String>(
-                                value: _selectedArea,
-                                items: _areas
-                                    .map((area) => DropdownMenuItem(
-                                          value: area,
-                                          child: Text(area),
-                                        ))
-                                    .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _selectedArea = value;
-                                  });
-                                },
-                                decoration: InputDecoration(
-                                  labelText: 'District',
-                                  border: OutlineInputBorder(),
+                                const SizedBox(height: 16.0),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedArea,
+                                  items: _areas
+                                      .map((area) => DropdownMenuItem(
+                                            value: area,
+                                            child: Text(area),
+                                          ))
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedArea = value;
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'District',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please select a district';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                              ),
-                              const SizedBox(height: 20.0),
-                              ElevatedButton(
-                                onPressed: _saveContactInfo,
-                                child: Text('Save'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal[800],
-                                  minimumSize: Size(double.infinity, 50),
+                                const SizedBox(height: 20.0),
+                                ElevatedButton(
+                                  onPressed: _saveContactInfo,
+                                  child: Text('Save'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.teal[800],
+                                    minimumSize: Size(double.infinity, 50),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -356,7 +393,8 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                           ),
                           markers: _markers,
                           onTap: (LatLng position) async {
-                            _addMarker(position, '${position.latitude}, ${position.longitude}');
+                            _addMarker(position,
+                                '${position.latitude}, ${position.longitude}');
                             await _getAddressFromLatLng(position);
                             setState(() {
                               _selectedLocation = position;
@@ -372,7 +410,6 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     );
   }
 
-  // Method to convert an address to LatLng
   Future<void> _getLatLngFromAddress(String address) async {
     try {
       List<Location> locations = await locationFromAddress(address);

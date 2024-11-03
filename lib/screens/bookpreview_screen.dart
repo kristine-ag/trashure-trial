@@ -9,12 +9,14 @@ class BookingPreviewScreen extends StatefulWidget {
   final Map<String, dynamic> selectedItems;
   final String address;
   final String contact;
+  final String district;
 
   const BookingPreviewScreen({
     Key? key,
     required this.selectedItems,
     required this.address,
     required this.contact,
+    required this.district,
   }) : super(key: key);
 
   @override
@@ -69,7 +71,6 @@ class _BookingPreviewAndScheduleScreenState
     });
   }
 
-// Function to handle booking submission
   Future<void> submitBooking(String bookingId) async {
     try {
       final User? user = _auth.currentUser;
@@ -103,6 +104,20 @@ class _BookingPreviewAndScheduleScreenState
       double totalUserPrice = 0;
       double totalUserWeight = 0;
 
+      // Calculate totalEstimatedProfit based on selected items
+      double totalEstimatedProfit = widget.selectedItems.entries.fold(
+        0.0,
+        (previousValue, entry) {
+          double weight = entry.value['weight'] ?? 0.0;
+          double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
+          return previousValue + (weight * pricePerKg);
+        },
+      );
+
+      // Deduct collection fee to calculate totalPrice
+      const double collectionFee = 40.0;
+      double totalPrice = totalEstimatedProfit - collectionFee;
+
       // Loop through each selected item and add its details to the recyclables subcollection
       for (var entry in widget.selectedItems.entries) {
         double weight = entry.value['weight'] ?? 0.0;
@@ -129,11 +144,12 @@ class _BookingPreviewAndScheduleScreenState
         });
       }
 
-      // Update user document with total price and weight
+      // Update user document with total price, weight, and calculated_total_price
       batch.update(userRef, {
         'total_price': double.parse(totalUserPrice.toStringAsFixed(2)),
         'total_weight': double.parse(totalUserWeight.toStringAsFixed(2)),
-        'status': "booked"
+        'calculated_total_price': double.parse(totalPrice.toStringAsFixed(2)),
+        'status': "booked",
       });
 
       // Commit all the changes
@@ -173,16 +189,20 @@ class _BookingPreviewAndScheduleScreenState
   Widget build(BuildContext context) {
     double totalWeight =
         widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      double itemWeight = (element.value['final_weight'] ?? 0.0) * 1.0;
+      double itemWeight = (element.value['weight'] ?? 0.0);
       return previousValue + itemWeight;
     });
 
-    double totalPrice =
+    double totalEstimatedProfit =
         widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      double itemPrice = (element.value['final_weight'] ?? 0.0) *
+      double itemPrice = (element.value['weight'] ?? 0.0) *
           (element.value['price_per_kg'] ?? 0.0);
       return previousValue + itemPrice;
     });
+
+    // Deduct collection fee
+    const double collectionFee = 40.0;
+    double totalPrice = totalEstimatedProfit - collectionFee;
 
     return Scaffold(
       appBar: CustomAppBar(),
@@ -202,7 +222,8 @@ class _BookingPreviewAndScheduleScreenState
                     children: [
                       Flexible(
                         flex: 6,
-                        child: _buildSelectedItemsWithPrices(),
+                        child: _buildSelectedItemsWithPrices(
+                            totalEstimatedProfit, totalPrice),
                       ),
                       const SizedBox(width: 20),
                       Flexible(
@@ -215,7 +236,8 @@ class _BookingPreviewAndScheduleScreenState
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSelectedItemsWithPrices(),
+                      _buildSelectedItemsWithPrices(
+                          totalEstimatedProfit, totalPrice),
                       const SizedBox(height: 30),
                       _buildAddressCard(context),
                     ],
@@ -238,8 +260,9 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
-  Widget _buildSelectedItemsWithPrices() {
-    double totalEstimatedProfit = 0.0;
+  Widget _buildSelectedItemsWithPrices(
+      double totalEstimatedProfit, double totalPrice) {
+    const double collectionFee = 40.0; // Fixed collection fee
 
     return Card(
       elevation: 5,
@@ -263,8 +286,6 @@ class _BookingPreviewAndScheduleScreenState
               double totalPriceForItem = itemWeight * pricePerKg;
               String description =
                   entry.value['description'] ?? 'No description available';
-
-              totalEstimatedProfit += totalPriceForItem;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -351,72 +372,27 @@ class _BookingPreviewAndScheduleScreenState
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddressCard(BuildContext context) {
-    return Card(
-      elevation: 5,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Default Address',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
             const SizedBox(height: 10),
-            Text(
-              widget.address.split(', Landmark: ')[0],
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'House no., Landmark, etc.',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.black,
-              ),
-            ),
-            Text(
-              widget.address.split(', Landmark: ').length > 1
-                  ? widget.address.split(', Landmark: ')[1]
-                  : 'N/A',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Contact Number',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.black,
-              ),
-            ),
-            Text(
-              widget.contact.isNotEmpty ? widget.contact : 'N/A',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Colors.black54,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Collection Fee',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black54,
+                  ),
+                ),
+                Text(
+                  '-₱${collectionFee.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -480,6 +456,71 @@ class _BookingPreviewAndScheduleScreenState
     );
   }
 
+  Widget _buildAddressCard(BuildContext context) {
+    return Card(
+      elevation: 5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Default Address',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              widget.address.split(', Landmark: ')[0],
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'District',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
+            Text(
+              widget.district, // Display district here
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Contact Number',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
+            Text(
+              widget.contact.isNotEmpty ? widget.contact : 'N/A',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildScheduleSection() {
     return StreamBuilder<QuerySnapshot>(
       stream: fetchBookings(),
@@ -497,7 +538,16 @@ class _BookingPreviewAndScheduleScreenState
           return const Center(child: Text('No bookings available.'));
         }
 
-        final bookings = snapshot.data!.docs;
+        // Filter documents by district
+        final bookings = snapshot.data!.docs.where((doc) {
+          final bookingData = doc.data() as Map<String, dynamic>;
+          return bookingData['location'] == widget.district;
+        }).toList();
+
+        if (bookings.isEmpty) {
+          return const Center(
+              child: Text('No bookings available for your district.'));
+        }
 
         return Card(
           elevation: 5,

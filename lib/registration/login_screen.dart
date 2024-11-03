@@ -16,8 +16,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  String? _errorMessage; // Add a variable to store error messages
 
   Future<void> _login() async {
+    setState(() {
+      _errorMessage = null; // Clear previous error messages
+    });
+
     if (_formKey.currentState!.validate()) {
       try {
         UserCredential userCredential =
@@ -30,6 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (user != null && !user.emailVerified) {
           await FirebaseAuth.instance.signOut();
+          setState(() {
+            _errorMessage = 'Please verify your email before logging in.';
+          });
         } else if (user != null) {
           final docSnapshot = await FirebaseFirestore.instance
               .collection('users')
@@ -48,7 +56,20 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
       } on FirebaseAuthException catch (e) {
-        // Error handling code
+        setState(() {
+          if (e.code == 'user-not-found') {
+            _errorMessage = 'No user found with this email.';
+          } else if (e.code == 'wrong-password') {
+            _errorMessage = 'Incorrect password. Please try again.';
+          } else {
+            _errorMessage = 'Incorrect Email or Password. Try signing up.';
+          }
+        });
+      } catch (e) {
+        // Handle any other errors
+        setState(() {
+          _errorMessage = 'An error occurred. Please try again.';
+        });
       }
     }
   }
@@ -102,6 +123,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24.0),
+                    // Display error message
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(color: Colors.red, fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     // Login Form
                     Form(
                       key: _formKey,

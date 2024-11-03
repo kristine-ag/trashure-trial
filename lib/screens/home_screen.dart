@@ -45,7 +45,7 @@ class HomeScreen extends StatelessWidget {
     return Stack(
       children: [
         Image.asset(
-          'assets/images/landing.jpg', // Replace with your image path
+          'assets/images/login.jpg', // Replace with your image path
           width: double.infinity,
           height:
               MediaQuery.of(context).size.height * 1, // Use relative height
@@ -122,7 +122,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     child: const Text(
-                      'Sell Your Trash Now',
+                      'Sell/Donate Your Trash Now',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -307,8 +307,11 @@ They will verify the weight and quality of the recyclables, after which the paym
         'icon': Icons.local_drink,
         'tip': 'Used in water bottles, clear with a "1" symbol.',
         'examples': [
-          'assets/images/plastic_pet.png'
-        ], // Replace with your image paths
+          'assets/recyclables/PET1.jpg',
+          'assets/recyclables/PET2.jpg',
+          'assets/recyclables/PET3.jpg',
+          'assets/recyclables/PET4.jpg'
+        ], 
       },
       {
         'title': 'HDPE (High-Density Polyethylene)',
@@ -342,14 +345,13 @@ They will verify the weight and quality of the recyclables, after which the paym
       },
     ];
 
-    // Calculate grid column count based on screen width
     int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: plasticTypes.length,
       physics: const ScrollPhysics(),
-      shrinkWrap: true, // Prevents GridView from taking infinite height
+      shrinkWrap: true,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: gridCount, // Responsive grid column count
         crossAxisSpacing: 16,
