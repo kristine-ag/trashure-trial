@@ -97,6 +97,18 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 800) {
+          return _buildDesktopLayout();
+        } else {
+          return _buildMobileLayout();
+        }
+      },
+    );
+  }
+
+  Widget _buildDesktopLayout() {
     return Scaffold(
       body: Row(
         children: [
@@ -109,7 +121,6 @@ class _SignupScreenState extends State<SignupScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Logo Image
                     Center(
                       child: Image.asset(
                         'assets/images/logo.png',
@@ -117,143 +128,12 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ),
                     const SizedBox(height: 24.0),
-                    // Animated Welcome Text
-                    Center(
-                      child: DefaultTextStyle(
-                        style: TextStyle(
-                          fontSize: 24.0,
-                          color: Colors.black,
-                        ),
-                        child: AnimatedTextKit(
-                          animatedTexts: [
-                            TypewriterAnimatedText('Welcome to Trashure'),
-                            TypewriterAnimatedText('Create Your Account'),
-                          ],
-                          repeatForever: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24.0),
-                    // Signup Form
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: _emailController,
-                            decoration: const InputDecoration(
-                              labelText: 'Email',
-                              prefixIcon: Icon(Icons.email),
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your email';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16.0),
-                          TextFormField(
-                            controller: _passwordController,
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: Icon(Icons.lock),
-                              border: OutlineInputBorder(),
-                            ),
-                            obscureText: true,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your password';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16.0),
-                          TextFormField(
-                            controller: _firstNameController,
-                            decoration: const InputDecoration(
-                              labelText: 'First Name',
-                              prefixIcon: Icon(Icons.person),
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your first name';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16.0),
-                          TextFormField(
-                            controller: _lastNameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Last Name',
-                              prefixIcon: Icon(Icons.person),
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your last name';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16.0),
-                          ElevatedButton(
-                            onPressed: _signup,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              minimumSize: const Size(double.infinity, 50),
-                            ),
-                            child: const Text(
-                              'Sign Up',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                          const SizedBox(height: 16.0),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pushNamed(context, '/login');
-                            },
-                            child: const Text(
-                              "I already have an account",
-                              style: TextStyle(color: Colors.green),
-                            ),
-                          ),
-                          const SizedBox(height: 16.0),
-                          const Divider(),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      TermsAndConditionsPage(), // Replace with your Terms and Conditions page
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'Terms and Conditions',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12.0,
-                                color: Colors.green, // Customize color to match your theme
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildSignupForm(),
                   ],
                 ),
               ),
             ),
           ),
-          // Right Side - Image with Gradient Overlay
           Expanded(
             flex: 3,
             child: Container(
@@ -274,6 +154,166 @@ class _SignupScreenState extends State<SignupScreen> {
                     end: Alignment.centerLeft,
                   ),
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return Scaffold(
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 24.0),
+              Center(
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  height: 100,
+                ),
+              ),
+              const SizedBox(height: 24.0),
+              Center(
+                child: DefaultTextStyle(
+                  style: TextStyle(
+                    fontSize: 20.0,
+                    color: Colors.black,
+                  ),
+                  child: AnimatedTextKit(
+                    animatedTexts: [
+                      TypewriterAnimatedText('Welcome to Trashure'),
+                      TypewriterAnimatedText('Create Your Account'),
+                    ],
+                    repeatForever: true,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24.0),
+              _buildSignupForm(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignupForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          TextFormField(
+            controller: _emailController,
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              prefixIcon: Icon(Icons.email),
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your email';
+              }
+              return null;
+            },
+            onFieldSubmitted: (value) => _signup(),
+          ),
+          const SizedBox(height: 16.0),
+          TextFormField(
+            controller: _passwordController,
+            decoration: const InputDecoration(
+              labelText: 'Password',
+              prefixIcon: Icon(Icons.lock),
+              border: OutlineInputBorder(),
+            ),
+            obscureText: true,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your password';
+              }
+              return null;
+            },
+            onFieldSubmitted: (value) => _signup(),
+          ),
+          const SizedBox(height: 16.0),
+          TextFormField(
+            controller: _firstNameController,
+            decoration: const InputDecoration(
+              labelText: 'First Name',
+              prefixIcon: Icon(Icons.person),
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your first name';
+              }
+              return null;
+            },
+            onFieldSubmitted: (value) => _signup(),
+          ),
+          const SizedBox(height: 16.0),
+          TextFormField(
+            controller: _lastNameController,
+            decoration: const InputDecoration(
+              labelText: 'Last Name',
+              prefixIcon: Icon(Icons.person),
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your last name';
+              }
+              return null;
+            },
+            onFieldSubmitted: (value) => _signup(),
+          ),
+          const SizedBox(height: 16.0),
+          ElevatedButton(
+            onPressed: _signup,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              minimumSize: const Size(double.infinity, 50),
+            ),
+            child: const Text(
+              'Sign Up',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 16.0),
+          TextButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/login');
+            },
+            child: const Text(
+              "I already have an account",
+              style: TextStyle(color: Colors.green),
+            ),
+          ),
+          const SizedBox(height: 16.0),
+          const Divider(),
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TermsAndConditionsPage(),
+                ),
+              );
+            },
+            child: const Text(
+              'Terms and Conditions',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.0,
+                color: Colors.green,
               ),
             ),
           ),

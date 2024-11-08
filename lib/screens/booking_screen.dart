@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:trashure/components/booking_history.dart';
+import 'package:trashure/components/firebase_options.dart';
 import 'package:trashure/screens/bookpreview_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:trashure/components/footer.dart';
@@ -24,29 +26,51 @@ class BookingScreen extends StatefulWidget {
 class _BookingScreenState extends State<BookingScreen> {
   bool get isDonateMode => widget.mode == 'donate';
   final user = FirebaseAuth.instance.currentUser;
+  Map<String, dynamic> _currentBookingDetails = {};
   final Map<String, ValueNotifier<double>> _productQuantities = {};
   final Map<String, double> _productPrices = {};
   final Map<String, Timestamp> _productTimestamps = {};
   final Map<String, String> _productDescriptions = {};
+  final Map<String, double> _originalPrices = {};
   final Map<String, String> _productCategories = {};
   final Map<String, String> _productIds = {};
   final Map<String, String> _productImages = {};
-  final ValueNotifier<double> _totalEstimatedProfit = ValueNotifier<double>(0.0);
+  final ValueNotifier<double> _totalEstimatedProfit =
+      ValueNotifier<double>(0.0);
   GoogleMapController? mapController;
   final Set<Marker> _markers = {};
   LatLng? currentPosition;
   String? currentAddress;
   String? _selectedArea;
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
-  final TextEditingController _defaultAddressController = TextEditingController();
+  final TextEditingController _defaultAddressController =
+      TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
   final TextEditingController _contactController = TextEditingController();
   bool _canBook = true;
   int? _daysLeft;
   final List<String> _areas = [
-    'POBLACION', 'TALOMO', 'AGDAO', 'BUHANGIN', 'BUNAWAN', 
-    'PAQUIBATO', 'BAGUIO', 'CALINAN', 'MARILOG', 'TORIL', 'TUGBOK'
+    'POBLACION',
+    'TALOMO',
+    'AGDAO',
+    'BUHANGIN',
+    'BUNAWAN',
+    'PAQUIBATO',
+    'BAGUIO',
+    'CALINAN',
+    'MARILOG',
+    'TORIL',
+    'TUGBOK'
   ];
+
+  String _truncateDescription(String description, int wordLimit) {
+    List<String> words = description.split(' ');
+    if (words.length > wordLimit) {
+      return words.take(wordLimit).join(' ') + '...';
+    } else {
+      return description;
+    }
+  }
 
   @override
   void initState() {
@@ -55,6 +79,7 @@ class _BookingScreenState extends State<BookingScreen> {
       await _fetchAddressFromFirestore();
       await _getUserLocation();
       await _checkBookingAvailability();
+      await _fetchCurrentBooking(); // Add this line
     });
   }
 
@@ -70,12 +95,17 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _fetchAddressFromFirestore() async {
     if (user != null) {
       try {
-        DocumentSnapshot userData = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
+        DocumentSnapshot userData = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .get();
         if (userData.exists) {
           String fetchedAddress = userData.get('address') ?? '';
           String fetchedContact = userData.get('contact') ?? '';
-          GeoPoint fetchedLocation = userData.get('location') ?? GeoPoint(7.0731, 125.6122);
-          LatLng fetchedLatLng = LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
+          GeoPoint fetchedLocation =
+              userData.get('location') ?? GeoPoint(7.0731, 125.6122);
+          LatLng fetchedLatLng =
+              LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
 
           setState(() {
             currentAddress = fetchedAddress;
@@ -97,22 +127,30 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() { currentAddress = 'Location services are disabled.'; });
+      setState(() {
+        currentAddress = 'Location services are disabled.';
+      });
       return;
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.deniedForever || permission == LocationPermission.denied) {
-        setState(() { currentAddress = 'Location permissions are denied.'; });
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        setState(() {
+          currentAddress = 'Location permissions are denied.';
+        });
         return;
       }
     }
 
     if (currentPosition == null) {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      setState(() { currentPosition = LatLng(position.latitude, position.longitude); });
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      setState(() {
+        currentPosition = LatLng(position.latitude, position.longitude);
+      });
       await _getAddressFromLatLng(currentPosition!);
       mapController?.animateCamera(CameraUpdate.newLatLng(currentPosition!));
       _addMarker(currentPosition!, currentAddress!);
@@ -120,7 +158,8 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _getAddressFromLatLng(LatLng position) async {
-    final String url = 'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=YOUR_GOOGLE_MAPS_API_KEY';
+    final String url =
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=${googleMapsApiKey}';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
@@ -129,13 +168,17 @@ class _BookingScreenState extends State<BookingScreen> {
           final formattedAddress = data['results'][0]['formatted_address'];
           setState(() {
             currentAddress = formattedAddress;
-            _defaultAddressController.text = formattedAddress;
+            _defaultAddressController.text =
+                formattedAddress; // Update the text field
             _updateDistrict(formattedAddress);
           });
         }
       }
     } catch (e) {
-      setState(() { currentAddress = 'Error fetching address: $e'; _defaultAddressController.text = 'Error fetching address'; });
+      setState(() {
+        currentAddress = 'Error fetching address: $e';
+        _defaultAddressController.text = 'Error fetching address';
+      });
     }
   }
 
@@ -160,7 +203,9 @@ class _BookingScreenState extends State<BookingScreen> {
   void _updateDistrict(String address) {
     for (var area in _areas) {
       if (address.toUpperCase().contains(area)) {
-        setState(() { _selectedArea = area; });
+        setState(() {
+          _selectedArea = area;
+        });
         break;
       }
     }
@@ -181,12 +226,30 @@ class _BookingScreenState extends State<BookingScreen> {
     if (userId == null) return false;
 
     try {
-      final bookingsSnapshot = await FirebaseFirestore.instance.collection('bookings').get();
+      final bookingsSnapshot =
+          await FirebaseFirestore.instance.collection('bookings').get();
       for (var bookingDoc in bookingsSnapshot.docs) {
-        final userDocSnapshot = await bookingDoc.reference.collection('users').doc(userId).get();
+        final userDocSnapshot =
+            await bookingDoc.reference.collection('users').doc(userId).get();
         if (userDocSnapshot.exists) {
           String userStatus = userDocSnapshot['status'] ?? '';
-          if (userStatus == 'booked') return true;
+          if (userStatus == 'booked') {
+            Timestamp bookingDateTimestamp = bookingDoc['date'];
+            DateTime bookingDate = bookingDateTimestamp.toDate();
+            DateTime currentDate = DateTime.now();
+            _daysLeft = bookingDate.difference(currentDate).inDays;
+
+            setState(() {
+              _canBook = false;
+              _currentBookingDetails = {
+                'date': bookingDate,
+                'daysLeft': _daysLeft,
+                'start_time': bookingDoc['start_time'],
+                'end_time': bookingDoc['end_time'],
+              };
+            });
+            return true;
+          }
         }
       }
     } catch (e) {
@@ -197,7 +260,8 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Future<String> _fetchImageFromFirebaseStorage(String fileName) async {
     try {
-      final ref = FirebaseStorage.instance.ref().child('product_images/$fileName');
+      final ref =
+          FirebaseStorage.instance.ref().child('product_images/$fileName');
       final imageUrl = await ref.getDownloadURL();
       return imageUrl;
     } catch (e) {
@@ -219,7 +283,85 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Future<void> _checkBookingAvailability() async {
     bool hasPendingBooking = await _checkIfUserHasPendingBooking();
-    setState(() { _canBook = !hasPendingBooking; });
+    setState(() {
+      _canBook = !hasPendingBooking;
+    });
+  }
+
+  Future<void> _fetchCurrentBooking() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      // Retrieve booking documents that contain the user's ID
+      final bookingsSnapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('users.$userId.uid', isEqualTo: userId)
+          .get();
+
+      if (bookingsSnapshot.docs.isNotEmpty) {
+        print("Found bookings for user");
+
+        for (var bookingDoc in bookingsSnapshot.docs) {
+          final bookingData = bookingDoc.data();
+          print("Booking data: $bookingData");
+
+          // Fetch user-specific data from the 'users' sub-collection
+          final userDocSnapshot =
+              await bookingDoc.reference.collection('users').doc(userId).get();
+
+          if (userDocSnapshot.exists) {
+            print("User document exists in booking");
+
+            // Initialize an empty list for recyclables
+            List<Map<String, dynamic>> recyclables = [];
+
+            // Fetch recyclables data from the 'recyclables' sub-collection
+            final recyclablesSnapshot =
+                await userDocSnapshot.reference.collection('recyclables').get();
+
+            print(
+                "Recyclables data found: ${recyclablesSnapshot.docs.length} items");
+
+            for (var recyclableDoc in recyclablesSnapshot.docs) {
+              recyclables.add({
+                'type': recyclableDoc['type'] ?? 'Unknown',
+                'price': recyclableDoc['price'] ?? '0',
+                'quantity': recyclableDoc['quantity'] ?? '0',
+                'item_price': recyclableDoc['item_price'] ?? 0.0,
+                'weight': recyclableDoc['weight'] ?? 0.0,
+              });
+            }
+
+            // Populate _currentBookingDetails with all data
+            setState(() {
+              _currentBookingDetails = {
+                'date': bookingData['date']?.toDate(),
+                'driver': bookingData['driver'] ?? 'N/A',
+                'vehicle': bookingData['vehicle'] ?? 'N/A',
+                'start_time': bookingData['start_time'] ?? 'N/A',
+                'end_time': bookingData['end_time'] ?? 'N/A',
+                'location': bookingData['location'] ?? 'N/A',
+                'total_price': userDocSnapshot['total_price'] ?? 0.0,
+                'total_weight': userDocSnapshot['total_weight'] ?? 0.0,
+                'address': userDocSnapshot['address'] ?? 'N/A',
+                'area': userDocSnapshot['area'] ?? 'N/A',
+                'recyclables': recyclables,
+              };
+
+              print("Current booking details: $_currentBookingDetails");
+            });
+            break;
+          } else {
+            print("User document does not exist in booking");
+          }
+        }
+      } else {
+        print('No booking found for the user.');
+      }
+    } catch (e) {
+      print('Error fetching current booking: $e');
+    }
   }
 
   @override
@@ -235,19 +377,22 @@ class _BookingScreenState extends State<BookingScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('You have a pending booking.', style: TextStyle(fontSize: 20, color: Colors.red)),
-                SizedBox(height: 10),
-                Text(
-                  'Please wait until your current booking is completed before making a new one.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16),
+                const Text(
+                  'You have a pending booking.',
+                  style: TextStyle(fontSize: 20, color: Colors.red),
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 10),
+                _buildBookingDetailsTable(),
+                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingHistoryScreen()));
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                const BookingHistoryScreen()));
                   },
-                  child: Text('View Booking History'),
+                  child: const Text('View Booking History'),
                 ),
               ],
             ),
@@ -260,11 +405,15 @@ class _BookingScreenState extends State<BookingScreen> {
       builder: (context, constraints) {
         bool isMobile = constraints.maxWidth < 600;
 
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('category').snapshots(),
-          builder: (context, categorySnapshot) {
-            if (categorySnapshot.hasError) return const Text('Error loading categories');
-            final categories = categorySnapshot.data?.docs ?? [];
+        return FutureBuilder<List<DocumentSnapshot>>(
+          future:
+              _getCategoriesWithProducts(), // Fetch categories with products
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Center(child: Text('Error loading categories'));
+            }
+
+            final categories = snapshot.data ?? [];
 
             return DefaultTabController(
               length: categories.length,
@@ -278,10 +427,44 @@ class _BookingScreenState extends State<BookingScreen> {
                       const SizedBox(height: 10),
                       Container(
                         height: 4,
-                        width: isMobile ? MediaQuery.of(context).size.width * 0.8 : 400,
+                        width: isMobile
+                            ? MediaQuery.of(context).size.width * 0.8
+                            : 400,
                         color: Colors.green[700],
                       ),
                       const SizedBox(height: 20),
+                      Column(
+                        children: [
+                          Text(
+                            isDonateMode
+                                ? 'The minimum donation amount is ₱100 worth of recyclables'
+                                : 'Minimum booking amount: ₱200',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[700]),
+                          ),
+                          const SizedBox(height: 5),
+                          ValueListenableBuilder<double>(
+                            valueListenable: _totalEstimatedProfit,
+                            builder: (context, totalProfit, child) {
+                              return Text(
+                                isDonateMode
+                                    ? 'Total Estimated Donation: ₱${totalProfit.toStringAsFixed(2)}'
+                                    : 'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: totalProfit >=
+                                            (isDonateMode ? 100.0 : 200.0)
+                                        ? Colors.green[700]
+                                        : Colors.red),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 20),
                       Container(
                         color: Colors.green[100],
                         child: TabBar(
@@ -298,34 +481,19 @@ class _BookingScreenState extends State<BookingScreen> {
                         child: TabBarView(
                           children: categories.map((categoryDoc) {
                             final categoryName = categoryDoc['category_name'];
-                            return _buildProductsSection(context, categoryName, isMobile);
+                            return _buildProductsSection(
+                                context, categoryName, isMobile);
                           }).toList(),
                         ),
-                      ),
-                      Column(
-                        children: [
-                          Text(
-                            'Minimum booking amount: ₱200',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[700]),
-                          ),
-                          const SizedBox(height: 5),
-                          ValueListenableBuilder<double>(
-                            valueListenable: _totalEstimatedProfit,
-                            builder: (context, totalProfit, child) {
-                              return Text(
-                                'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: totalProfit >= 150.0 ? Colors.green[700] : Colors.red),
-                              );
-                            },
-                          ),
-                        ],
                       ),
                       const SizedBox(height: 50),
                       _buildSectionTitle('VERIFY YOUR ADDRESS'),
                       const SizedBox(height: 10),
                       Container(
                         height: 4,
-                        width: isMobile ? MediaQuery.of(context).size.width * 0.8 : 400,
+                        width: isMobile
+                            ? MediaQuery.of(context).size.width * 0.8
+                            : 400,
                         color: Colors.green[700],
                       ),
                       const SizedBox(height: 20),
@@ -333,16 +501,23 @@ class _BookingScreenState extends State<BookingScreen> {
                       const SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: () async {
-                          if (_totalEstimatedProfit.value < 200.0) {
+                          double minimumAmount = isDonateMode ? 100.0 : 200.0;
+
+                          if (_totalEstimatedProfit.value < minimumAmount) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please add more recyclables to reach the minimum amount of ₱200.')),
+                              SnackBar(
+                                content: Text(
+                                    'Please add more recyclables to reach the minimum amount of ₱${minimumAmount.toStringAsFixed(0)}.'),
+                              ),
                             );
                             return;
                           }
 
                           if (_selectedArea == null || _selectedArea!.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please select a district to proceed.')),
+                              const SnackBar(
+                                  content: Text(
+                                      'Please select a district to proceed.')),
                             );
                             return;
                           }
@@ -351,15 +526,21 @@ class _BookingScreenState extends State<BookingScreen> {
                           _productQuantities.forEach((productName, notifier) {
                             if (notifier.value > 0) {
                               final productPrice = _productPrices[productName];
-                              final priceTimestamp = _productTimestamps[productName];
-                              final productDescription = _productDescriptions[productName];
+                              final priceTimestamp =
+                                  _productTimestamps[productName];
+                              final productDescription =
+                                  _productDescriptions[productName];
                               final productImage = _productImages[productName];
-                              final productCategory = _productCategories[productName];
+                              final productCategory =
+                                  _productCategories[productName];
                               final productId = _productIds[productName];
+                              final originalPrice =
+                                  _originalPrices[productName];
 
                               selectedItems[productName] = {
                                 'weight': notifier.value,
                                 'price_per_kg': productPrice,
+                                'original_price': originalPrice,
                                 'total_price': notifier.value * productPrice!,
                                 'price_timestamp': priceTimestamp,
                                 'description': productDescription,
@@ -373,7 +554,9 @@ class _BookingScreenState extends State<BookingScreen> {
 
                           if (selectedItems.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please select at least one item.')),
+                              const SnackBar(
+                                  content:
+                                      Text('Please select at least one item.')),
                             );
                             return;
                           }
@@ -385,11 +568,16 @@ class _BookingScreenState extends State<BookingScreen> {
 
                           if (user != null) {
                             try {
-                              await FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(user!.uid)
+                                  .update({
                                 'address': address,
                                 'landmark': landmark,
                                 'contact': contact,
-                                'location': GeoPoint(currentPosition?.latitude ?? 0.0, currentPosition?.longitude ?? 0.0),
+                                'location': GeoPoint(
+                                    currentPosition?.latitude ?? 0.0,
+                                    currentPosition?.longitude ?? 0.0),
                                 'area': _selectedArea?.toLowerCase(),
                               });
                             } catch (e) {
@@ -404,16 +592,21 @@ class _BookingScreenState extends State<BookingScreen> {
                                 selectedItems: selectedItems,
                                 address: fullAddress,
                                 contact: contact,
-                                district: _selectedArea!,
+                                district: _selectedArea!, mode: isDonateMode ? 'donate' : 'sell'
                               ),
                             ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[700],
-                          padding: isMobile ? const EdgeInsets.symmetric(horizontal: 24, vertical: 12) : const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          padding: isMobile
+                              ? const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12)
+                              : const EdgeInsets.symmetric(
+                                  horizontal: 32, vertical: 16),
                         ),
-                        child: const Text('Next', style: TextStyle(color: Colors.white)),
+                        child: const Text('Next',
+                            style: TextStyle(color: Colors.white)),
                       ),
                       const SizedBox(height: 20),
                       const Footer(),
@@ -428,13 +621,193 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  Widget _buildProductsSection(BuildContext context, String category, bool isMobile) {
+// Helper function to get only categories with products
+  Future<List<DocumentSnapshot>> _getCategoriesWithProducts() async {
+    final categorySnapshot =
+        await FirebaseFirestore.instance.collection('category').get();
+    final categoriesWithProducts = <DocumentSnapshot>[];
+
+    for (var categoryDoc in categorySnapshot.docs) {
+      final productsSnapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .where('category', isEqualTo: categoryDoc['category_name'])
+          .limit(1)
+          .get();
+
+      // Only add categories that have at least one product
+      if (productsSnapshot.docs.isNotEmpty) {
+        categoriesWithProducts.add(categoryDoc);
+      }
+    }
+
+    return categoriesWithProducts;
+  }
+
+  Widget _buildBookingDetailsTable() {
+    print(
+        "_currentBookingDetails in _buildBookingDetailsTable: $_currentBookingDetails");
+
+    final bookingDate = _currentBookingDetails['date'];
+    final formattedBookingDate = bookingDate is Timestamp
+        ? DateFormat('MM/dd/yyyy').format(bookingDate.toDate())
+        : bookingDate is DateTime
+            ? DateFormat('MM/dd/yyyy').format(bookingDate)
+            : 'N/A';
+
+    final booking = {
+      'date': formattedBookingDate,
+      'bookingId': _currentBookingDetails['bookingId'] ?? 'N/A',
+      'driver': _currentBookingDetails['driver'] ?? 'N/A',
+      'vehicle': _currentBookingDetails['vehicle'] ?? 'N/A',
+      'status': 'booked', // Assuming status is 'booked' for the current booking
+      'recyclables': _currentBookingDetails['recyclables'] ?? [],
+      'final_weight': _currentBookingDetails['total_weight'] ?? 0.0,
+      'final_item_price': _currentBookingDetails['total_price'] ?? 0.0,
+    };
+
+    return Column(
+      children: [
+        Card(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ExpansionTile(
+            backgroundColor: Colors.grey[100],
+            title: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Date: $formattedBookingDate',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Booking ID: ${booking['bookingId']}'),
+                  Text('Driver: ${booking['driver']}'),
+                  Text('Vehicle: ${booking['vehicle']}'),
+                  Text(
+                    'Status: ${booking['status']}',
+                    style: TextStyle(
+                      color: booking['status'] == 'collected'
+                          ? Colors.green
+                          : Colors.orange,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            children: [
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Recyclables',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Table(
+                      columnWidths: const {
+                        0: FlexColumnWidth(3),
+                        1: FlexColumnWidth(2),
+                        2: FlexColumnWidth(2),
+                        3: FlexColumnWidth(2),
+                      },
+                      border: TableBorder.all(color: Colors.grey, width: 0.5),
+                      children: [
+                        TableRow(
+                          decoration: BoxDecoration(color: Colors.grey[300]),
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text('Type',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text('Weight',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text('Price per kg',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text('Total',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        ...booking['recyclables'].map<TableRow>((recyclable) {
+                          return TableRow(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text(recyclable['type'] ?? 'Unknown'),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text('${recyclable['weight'] ?? 0} kg'),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text('₱${recyclable['price'] ?? 0}'),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text(
+                                    '₱${((recyclable['weight'] ?? 0) * (recyclable['price'] ?? 0)).toStringAsFixed(2)}'),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Total Weight: ${booking['final_weight']} kg',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    Text(
+                      'Total Price: ₱${booking['final_item_price']}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductsSection(
+      BuildContext context, String category, bool isMobile) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('products').where('category', isEqualTo: category).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('products')
+          .where('category', isEqualTo: category)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) return const Text('Error loading products');
         final products = snapshot.data?.docs ?? [];
-        if (products.isEmpty) return const Text('No products available in this category.');
+        if (products.isEmpty)
+          return const Text('No products available in this category.');
 
         return SingleChildScrollView(
           child: Wrap(
@@ -452,25 +825,42 @@ class _BookingScreenState extends State<BookingScreen> {
               _productIds[productName] = productId;
 
               return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('products').doc(productDoc.id).collection('prices').orderBy('time', descending: true).limit(1).snapshots(),
+                stream: FirebaseFirestore.instance
+                    .collection('products')
+                    .doc(productDoc.id)
+                    .collection('prices')
+                    .orderBy('time', descending: true)
+                    .limit(1)
+                    .snapshots(),
                 builder: (context, priceSnapshot) {
-                  if (!priceSnapshot.hasData || priceSnapshot.data!.docs.isEmpty) return const Text('Price unavailable');
+                  if (!priceSnapshot.hasData ||
+                      priceSnapshot.data!.docs.isEmpty)
+                    return const Text('Price unavailable');
 
-                  final priceData = priceSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                  final priceData = priceSnapshot.data!.docs.first.data()
+                      as Map<String, dynamic>;
                   final productPrice = priceData['price'] as double;
+                  final originalPrice = priceData['original_price']
+                      as double; // fetch original price
                   final priceTimestamp = priceData['time'] as Timestamp;
 
-                  _productQuantities.putIfAbsent(productName, () => ValueNotifier<double>(0));
+                  _productQuantities.putIfAbsent(
+                      productName, () => ValueNotifier<double>(0));
                   _productPrices.putIfAbsent(productName, () => productPrice);
-                  _productTimestamps.putIfAbsent(productName, () => priceTimestamp);
-                  _productDescriptions.putIfAbsent(productName, () => productDescription);
-                  _productImages.putIfAbsent(productName, () => productImageFile);
+                  _originalPrices.putIfAbsent(productName, () => originalPrice);
+                  _productTimestamps.putIfAbsent(
+                      productName, () => priceTimestamp);
+                  _productDescriptions.putIfAbsent(
+                      productName, () => productDescription);
+                  _productImages.putIfAbsent(
+                      productName, () => productImageFile);
 
                   return _buildProductCard(
                     context,
                     productName,
                     productDescription,
                     productPrice,
+                    originalPrice, // pass original price to card
                     productImageFile,
                     priceTimestamp,
                     productCategory,
@@ -491,29 +881,37 @@ class _BookingScreenState extends State<BookingScreen> {
     String title,
     String description,
     double pricePerKg,
+    double originalPrice,
     String imageFileName,
     Timestamp priceTimestamp,
     String category,
     String documentId,
     bool isMobile,
   ) {
-    TextEditingController weightController = TextEditingController();
-    weightController.text = _productQuantities[title]!.value.toStringAsFixed(2);
+    // Initialize the controller with the current value from the ValueNotifier
+    final weightController = TextEditingController();
+    weightController.text = _productQuantities[title]?.value.toString() ?? '0';
 
     return SizedBox(
-      width: isMobile ? MediaQuery.of(context).size.width * 0.9 : (MediaQuery.of(context).size.width - 48) / 2,
+      width: isMobile
+          ? MediaQuery.of(context).size.width * 0.9
+          : (MediaQuery.of(context).size.width - 48) / 2,
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         child: Padding(
-          padding: isMobile ? const EdgeInsets.all(10.0) : const EdgeInsets.all(20.0),
+          padding: isMobile
+              ? const EdgeInsets.all(10.0)
+              : const EdgeInsets.all(20.0),
           child: Column(
             children: [
               FutureBuilder<String>(
                 future: _fetchImageFromFirebaseStorage(imageFileName),
                 builder: (context, snapshot) {
-                  if (snapshot.hasError) return const Text('Error loading image');
-                  if (!snapshot.hasData) return const Text('Image not available');
+                  if (snapshot.hasError)
+                    return const Text('Error loading image');
+                  if (!snapshot.hasData)
+                    return const Text('Image not available');
 
                   final imageUrl = snapshot.data!;
                   return Row(
@@ -521,7 +919,8 @@ class _BookingScreenState extends State<BookingScreen> {
                       Expanded(
                         flex: isMobile ? 4 : 3,
                         child: ClipRRect(
-                          borderRadius: const BorderRadius.all(Radius.circular(10)),
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(10)),
                           child: Image.network(
                             imageUrl,
                             height: isMobile ? 100 : 150,
@@ -535,18 +934,31 @@ class _BookingScreenState extends State<BookingScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(title, style: TextStyle(fontSize: isMobile ? 16 : 20, fontWeight: FontWeight.bold, color: Colors.black)),
+                            Text(title,
+                                style: TextStyle(
+                                    fontSize: isMobile ? 16 : 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black)),
                             const SizedBox(height: 5),
-                            Text(description, style: TextStyle(fontSize: isMobile ? 12 : 14, color: Colors.grey[700])),
+                            Text(
+                              _truncateDescription(description, 20),
+                              style: TextStyle(
+                                fontSize: isMobile ? 12 : 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                      if (!isDonateMode && !isMobile)
+                      if (!isMobile)
                         Expanded(
                           flex: 2,
                           child: Text(
                             '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                            style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black),
                             textAlign: TextAlign.end,
                           ),
                         ),
@@ -554,68 +966,83 @@ class _BookingScreenState extends State<BookingScreen> {
                   );
                 },
               ),
-              if (!isDonateMode && isMobile)
+              if (isMobile)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('₱ ${pricePerKg.toStringAsFixed(2)} / kg', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black), textAlign: TextAlign.center),
+                  child: Text('₱ ${pricePerKg.toStringAsFixed(2)} / kg',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black),
+                      textAlign: TextAlign.center),
                 ),
               Divider(thickness: 1, color: Colors.green[100]),
               ValueListenableBuilder<double>(
                 valueListenable: _productQuantities[title]!,
                 builder: (context, weight, child) {
-                  weightController.text = weight.toStringAsFixed(2);
+                  // Update the controller's text whenever the weight changes
+                  weightController.value = TextEditingValue(
+                    text: weight.toString(),
+                    selection: TextSelection.fromPosition(
+                      TextPosition(offset: weight.toString().length),
+                    ),
+                  );
 
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      IconButton(
-                        icon: Icon(Icons.remove, color: Colors.green[700]),
-                        onPressed: () {
-                          if (weight > 0) {
-                            double newWeight = (weight - 0.1).clamp(0.0, double.infinity);
-                            newWeight = double.parse(newWeight.toStringAsFixed(2));
-                            _productQuantities[title]!.value = newWeight;
-                            _updateTotalEstimatedProfit();
-                          }
-                        },
-                      ),
-                      SizedBox(
-                        width: 100,
-                        height: 40,
-                        child: TextField(
-                          controller: weightController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          textAlign: TextAlign.center,
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
-                            contentPadding: EdgeInsets.zero,
+                      Row(
+                        children: [
+                          Text(
+                            'Enter weight:',
+                            style: TextStyle(
+                                fontSize: 16, color: Colors.grey[700]),
                           ),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                          onChanged: (value) {
-                            double? newWeight = double.tryParse(value);
-                            if (newWeight != null) {
-                              newWeight = double.parse(newWeight.toStringAsFixed(2));
-                              _productQuantities[title]!.value = newWeight;
-                              _updateTotalEstimatedProfit();
-                            }
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.add, color: Colors.green[700]),
-                        onPressed: () {
-                          double newWeight = _productQuantities[title]!.value + 0.1;
-                          newWeight = double.parse(newWeight.toStringAsFixed(2));
-                          _productQuantities[title]!.value = newWeight;
-                          _updateTotalEstimatedProfit();
-                        },
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            height: 40,
+                            width: 100,
+                            child: TextField(
+                              controller: weightController,
+                              keyboardType: TextInputType.numberWithOptions(
+                                  decimal: true),
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              onChanged: (value) {
+                                double? newWeight = double.tryParse(value);
+                                if (newWeight != null) {
+                                  newWeight = double.parse(
+                                      newWeight.toStringAsFixed(2));
+                                  _productQuantities[title]!.value = newWeight;
+                                  _updateTotalEstimatedProfit();
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                       if (!isDonateMode)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('Estimated Profit', style: TextStyle(fontSize: isMobile ? 14 : 16, color: Colors.grey[700])),
-                            Text('₱ ${(pricePerKg * weight).toStringAsFixed(2)}', style: TextStyle(fontSize: isMobile ? 16 : 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                            Text(
+                              'Estimated Profit',
+                              style: TextStyle(
+                                  fontSize: 16, color: Colors.grey[700]),
+                            ),
+                            Text(
+                              '₱ ${(pricePerKg * weight).toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
                           ],
                         ),
                     ],
@@ -637,17 +1064,27 @@ class _BookingScreenState extends State<BookingScreen> {
           children: [
             Container(
               height: 300,
-              decoration: BoxDecoration(border: Border.all(color: Colors.green, width: 2)),
+              decoration: BoxDecoration(
+                  border: Border.all(color: Colors.green, width: 2)),
               child: GoogleMap(
                 onMapCreated: (controller) {
                   mapController = controller;
                 },
-                initialCameraPosition: CameraPosition(target: currentPosition ?? _initialPosition, zoom: 15),
+                initialCameraPosition: CameraPosition(
+                    target: currentPosition ?? _initialPosition, zoom: 15),
                 markers: _markers,
                 onTap: (LatLng position) async {
-                  _addMarker(position, '${position.latitude}, ${position.longitude}');
+                  setState(() {
+                    currentPosition = position;
+                  });
+
+                  // Fetch the address for the tapped location
                   await _getAddressFromLatLng(position);
-                  setState(() { currentPosition = position; });
+
+                  // Add the marker on the new position and update the text field
+                  _addMarker(position, currentAddress ?? 'Selected Location');
+                  _defaultAddressController.text = currentAddress ??
+                      ''; // Explicitly update the TextEditingController
                 },
               ),
             ),
@@ -665,17 +1102,27 @@ class _BookingScreenState extends State<BookingScreen> {
               flex: 4,
               child: Container(
                 height: 450,
-                decoration: BoxDecoration(border: Border.all(color: Colors.green, width: 2)),
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.green, width: 2)),
                 child: GoogleMap(
                   onMapCreated: (controller) {
                     mapController = controller;
                   },
-                  initialCameraPosition: CameraPosition(target: currentPosition ?? _initialPosition, zoom: 15),
+                  initialCameraPosition: CameraPosition(
+                      target: currentPosition ?? _initialPosition, zoom: 15),
                   markers: _markers,
                   onTap: (LatLng position) async {
-                    _addMarker(position, '${position.latitude}, ${position.longitude}');
+                    setState(() {
+                      currentPosition = position;
+                    });
+
+                    // Fetch the address for the tapped location
                     await _getAddressFromLatLng(position);
-                    setState(() { currentPosition = position; });
+
+                    // Add the marker on the new position and update the text field
+                    _addMarker(position, currentAddress ?? 'Selected Location');
+                    _defaultAddressController.text = currentAddress ??
+                        ''; // Explicitly update the TextEditingController
                   },
                 ),
               ),
@@ -698,35 +1145,49 @@ class _BookingScreenState extends State<BookingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Default Address (Please click on the map your exact address)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+        const Text(
+            'Default Address (Please click on the map your exact location)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         TextField(
           controller: _defaultAddressController,
-          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Enter default address'),
-          onSubmitted: (value) { _getLatLngFromAddress(value); },
+          decoration: const InputDecoration(
+              border: OutlineInputBorder(), hintText: 'Enter default address'),
+          onSubmitted: (value) {
+            _getLatLngFromAddress(value);
+          },
         ),
         const SizedBox(height: 20),
-        const Text('House no., Landmark, etc.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+        const Text('House no., Landmark, etc.',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         TextField(
           controller: _landmarkController,
-          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Enter landmark or house no.'),
+          decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'Enter landmark or house no.'),
         ),
         const SizedBox(height: 20),
-        const Text('District', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+        const Text('District',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _selectedArea,
-          items: _areas.map((area) => DropdownMenuItem(value: area, child: Text(area))).toList(),
+          items: _areas
+              .map((area) => DropdownMenuItem(value: area, child: Text(area)))
+              .toList(),
           onChanged: (value) => setState(() => _selectedArea = value),
-          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Select District'),
+          decoration: const InputDecoration(
+              border: OutlineInputBorder(), hintText: 'Select District'),
         ),
         const SizedBox(height: 20),
-        const Text('Phone Number', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+        const Text('Phone Number',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         TextField(
           controller: _contactController,
-          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Enter phone number'),
+          decoration: const InputDecoration(
+              border: OutlineInputBorder(), hintText: 'Enter phone number'),
           keyboardType: TextInputType.phone,
         ),
       ],
@@ -739,7 +1200,11 @@ class _BookingScreenState extends State<BookingScreen> {
       child: Center(
         child: Text(
           title,
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.green[700], letterSpacing: 1.5),
+          style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.green[700],
+              letterSpacing: 1.5),
         ),
       ),
     );
@@ -750,20 +1215,30 @@ class _BookingScreenState extends State<BookingScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('Trashure - Login Required', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 24)),
+        title: Text('Trashure - Login Required',
+            style: TextStyle(
+                color: Colors.green[700],
+                fontWeight: FontWeight.bold,
+                fontSize: 24)),
       ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('You need to be logged in to proceed.', style: TextStyle(fontSize: 18, color: Colors.black), textAlign: TextAlign.center),
+            const Text('You need to be logged in to proceed.',
+                style: TextStyle(fontSize: 18, color: Colors.black),
+                textAlign: TextAlign.center),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
                 Navigator.pushNamed(context, '/login');
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
-              child: const Text('Login Now', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
+              child: const Text('Login Now',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),

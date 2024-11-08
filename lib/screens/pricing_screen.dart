@@ -146,7 +146,7 @@ class _PricingScreenState extends State<PricingScreen> {
             ? Text(content,
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
-            : content, // Display Text widget for String content, or pass the widget directly
+            : content, 
       ),
     );
   }

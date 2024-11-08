@@ -1,10 +1,47 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart'; // For rendering Markdown
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:trashure/components/appbar.dart';
 import 'package:trashure/components/footer.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Marker> _warehouseMarkers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWarehouseLocations();
+  }
+
+  Future<void> _fetchWarehouseLocations() async {
+    final CollectionReference branchCollection =
+        FirebaseFirestore.instance.collection('branch');
+
+    final QuerySnapshot snapshot = await branchCollection.get();
+    final markers = snapshot.docs.map((doc) {
+      GeoPoint geoPoint = doc['location'];
+      return Marker(
+        markerId: MarkerId(doc.id),
+        position: LatLng(geoPoint.latitude, geoPoint.longitude),
+        infoWindow: InfoWindow(
+          title: doc['name'] ?? 'Warehouse',
+          snippet: doc['address'] ?? '',
+        ),
+      );
+    }).toList();
+
+    setState(() {
+      _warehouseMarkers = markers;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,17 +54,16 @@ class HomeScreen extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  _buildBanner(context), // Existing banner
+                  _buildBanner(context),
                   const SizedBox(height: 20),
-                  _buildStepByStepGuide(
-                      context), // Updated interactive step-by-step guide
+                  _buildDirectDeliverySection(context),
                   const SizedBox(height: 40),
-                  _buildMaterialTypesSection(
-                      context), // Updated section for materials
+                  _buildStepByStepGuide(context),
+                  const SizedBox(height: 40),
+                  _buildMaterialTypesSection(context),
                   const SizedBox(height: 40),
                   Divider(
-                    color: Colors.grey[
-                        400], // Divider color to separate the body from the Footer
+                    color: Colors.grey[400],
                     thickness: 1,
                     height: 1,
                   ),
@@ -45,13 +81,11 @@ class HomeScreen extends StatelessWidget {
     return Stack(
       children: [
         Image.asset(
-          'assets/images/landing.jpg', // Replace with your image path
+          'assets/images/login.jpg', // Replace with your image path
           width: double.infinity,
-          height:
-              MediaQuery.of(context).size.height * 0.4, // Use relative height
+          height: MediaQuery.of(context).size.height * 1, // Use relative height
           fit: BoxFit.cover,
         ),
-        // Gradient overlay to add a green tint
         Positioned.fill(
           child: Container(
             decoration: BoxDecoration(
@@ -66,10 +100,9 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
-        // Text Overlay
         Positioned.fill(
           child: Align(
-            alignment: Alignment.center,
+            alignment: Alignment.topRight,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -80,7 +113,7 @@ class HomeScreen extends StatelessWidget {
                     'Join the solution with Trashure:',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24, // Reduce font size for smaller screens
+                      fontSize: 30,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -90,7 +123,7 @@ class HomeScreen extends StatelessWidget {
                     'Sell your segregated trash and earn money.',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 20, // Adjust font size
+                      fontSize: 24,
                       fontWeight: FontWeight.normal,
                     ),
                     textAlign: TextAlign.center,
@@ -100,7 +133,7 @@ class HomeScreen extends StatelessWidget {
                     'Together, we can create a cleaner, greener planet!',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 20, // Adjust font size
+                      fontSize: 24,
                       fontWeight: FontWeight.normal,
                     ),
                     textAlign: TextAlign.center,
@@ -112,7 +145,7 @@ class HomeScreen extends StatelessWidget {
                     },
                     style: ElevatedButton.styleFrom(
                       foregroundColor: Colors.green,
-                      backgroundColor: Colors.white, // Button background color
+                      backgroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24.0,
                         vertical: 12.0,
@@ -122,7 +155,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     child: const Text(
-                      'Sell Your Trash Now',
+                      'Sell/Donate Your Trash Now',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -135,6 +168,44 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDirectDeliverySection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Direct Delivery to Warehouse',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.green,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Want to save on the ₱40 collection fee? Deliver your segregated recyclables directly to our warehouse and avoid the pickup cost. Find the nearest warehouse on the map below!',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 300,
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: LatLng(10.3157, 123.8854),
+                zoom: 12,
+              ),
+              markers: Set.from(_warehouseMarkers),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -274,19 +345,18 @@ They will verify the weight and quality of the recyclables, after which the paym
       length: 3, // Number of tabs: Plastic, Metal, Glass
       child: Column(
         children: [
-          TabBar(
+          const TabBar(
             labelColor: Colors.green,
             unselectedLabelColor: Colors.black,
             indicatorColor: Colors.green,
-            tabs: const [
+            tabs: [
               Tab(text: 'Plastic'),
               Tab(text: 'Metal'),
               Tab(text: 'Glass'),
             ],
           ),
           SizedBox(
-            height:
-                MediaQuery.of(context).size.height * 0.5, // Use relative height
+            height: MediaQuery.of(context).size.height * 0.5,
             child: TabBarView(
               children: [
                 _buildPlasticTypesGrid(context),
@@ -307,8 +377,11 @@ They will verify the weight and quality of the recyclables, after which the paym
         'icon': Icons.local_drink,
         'tip': 'Used in water bottles, clear with a "1" symbol.',
         'examples': [
-          'assets/images/plastic_pet.png'
-        ], // Replace with your image paths
+          'assets/recyclables/PET1.jpg',
+          'assets/recyclables/PET2.jpg',
+          'assets/recyclables/PET3.jpg',
+          'assets/recyclables/PET4.jpg'
+        ],
       },
       {
         'title': 'HDPE (High-Density Polyethylene)',
@@ -342,15 +415,13 @@ They will verify the weight and quality of the recyclables, after which the paym
       },
     ];
 
-    // Calculate grid column count based on screen width
     int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
 
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: plasticTypes.length,
-      shrinkWrap: true, // Prevents GridView from taking infinite height
-      physics:
-          const NeverScrollableScrollPhysics(), // Prevent internal scrolling
+      physics: const ScrollPhysics(),
+      shrinkWrap: true,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: gridCount, // Responsive grid column count
         crossAxisSpacing: 16,
@@ -426,14 +497,19 @@ They will verify the weight and quality of the recyclables, after which the paym
       // Add more metal types as needed
     ];
 
+    // Calculate grid column count based on screen width
+    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
+
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: metalTypes.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4, // Adjusted to 2
+      physics: const ScrollPhysics(),
+      shrinkWrap: true, // Prevents GridView from taking infinite height
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: gridCount, // Responsive grid column count
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.8,
+        childAspectRatio: 0.8, // Adjusted aspect ratio
       ),
       itemBuilder: (context, index) {
         final metal = metalTypes[index];
@@ -504,14 +580,19 @@ They will verify the weight and quality of the recyclables, after which the paym
       // Add more glass types as needed
     ];
 
+    // Calculate grid column count based on screen width
+    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
+
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: glassTypes.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4, // Adjusted to 2
+      physics: const ScrollPhysics(),
+      shrinkWrap: true, // Prevents GridView from taking infinite height
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: gridCount, // Responsive grid column count
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.8,
+        childAspectRatio: 0.8, // Adjusted aspect ratio
       ),
       itemBuilder: (context, index) {
         final glass = glassTypes[index];
@@ -583,7 +664,7 @@ class MaterialDetailsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: Colors.green, // Adjust the color as needed
+        backgroundColor: Colors.green,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

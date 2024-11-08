@@ -6,6 +6,7 @@ import 'package:trashure/screens/bookconfirm_screen.dart';
 import '../components/appbar.dart';
 
 class BookingPreviewScreen extends StatefulWidget {
+  final String mode;
   final Map<String, dynamic> selectedItems;
   final String address;
   final String contact;
@@ -13,6 +14,7 @@ class BookingPreviewScreen extends StatefulWidget {
 
   const BookingPreviewScreen({
     Key? key,
+    required this.mode,
     required this.selectedItems,
     required this.address,
     required this.contact,
@@ -26,6 +28,7 @@ class BookingPreviewScreen extends StatefulWidget {
 
 class _BookingPreviewAndScheduleScreenState
     extends State<BookingPreviewScreen> {
+  bool get isDonateMode => widget.mode == 'donate';
   String? selectedBookingId;
   String? selectedSchedule;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -79,6 +82,7 @@ class _BookingPreviewAndScheduleScreenState
       }
 
       final uid = user.uid;
+      final donated = 0;
 
       // Retrieve the user's document to add user data to booking
       final userDoc =
@@ -123,6 +127,11 @@ class _BookingPreviewAndScheduleScreenState
         double weight = entry.value['weight'] ?? 0.0;
         double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
         double itemPrice = weight * pricePerKg;
+
+        // Format price and itemPrice to two decimal places
+        pricePerKg = double.parse(pricePerKg.toStringAsFixed(2));
+        itemPrice = double.parse(itemPrice.toStringAsFixed(2));
+
         totalUserPrice += itemPrice;
         totalUserWeight += weight;
 
@@ -130,18 +139,31 @@ class _BookingPreviewAndScheduleScreenState
         String category = entry.value['category'] ?? 'Unknown Category';
         String documentId = entry.value['product_Id'] ?? 'Unknown ID';
 
-        // Add each recyclable item with the additional fields
-        batch.set(userRef.collection('recyclables').doc(), {
+        // Prepare the recyclable item data
+        Map<String, dynamic> recyclableData = {
           'type': entry.key,
           'weight': weight,
-          'price': pricePerKg,
-          'item_price': itemPrice,
+          'price': donated, 
+          'item_price': donated, 
           'timestamp':
               (entry.value['price_timestamp'] as Timestamp?)?.toDate() ??
                   DateTime.now(),
-          'category': category, // Added category
-          'product_Id': documentId, // Added documentId
-        });
+          'category': category,
+          'product_Id': documentId,
+        };
+
+        // Add original_price only if not in donate mode
+        if (!isDonateMode) {
+          recyclableData['original_price'] =
+              entry.value['original_price'] ?? 0.0;
+          recyclableData['price'] =
+              entry.value[pricePerKg] ?? 0.0;
+          recyclableData['item_price'] =
+              entry.value[itemPrice] ?? 0.0;
+        }
+
+        // Add each recyclable item with the conditional fields
+        batch.set(userRef.collection('recyclables').doc(), recyclableData);
       }
 
       // Update user document with total price, weight, and calculated_total_price
@@ -187,6 +209,7 @@ class _BookingPreviewAndScheduleScreenState
 
   @override
   Widget build(BuildContext context) {
+    print(isDonateMode);
     double totalWeight =
         widget.selectedItems.entries.fold(0.0, (previousValue, element) {
       double itemWeight = (element.value['weight'] ?? 0.0);
@@ -282,8 +305,6 @@ class _BookingPreviewAndScheduleScreenState
             const SizedBox(height: 10),
             ...widget.selectedItems.entries.map((entry) {
               double itemWeight = entry.value['weight'] ?? 0.0;
-              double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
-              double totalPriceForItem = itemWeight * pricePerKg;
               String description =
                   entry.value['description'] ?? 'No description available';
 
@@ -325,75 +346,72 @@ class _BookingPreviewAndScheduleScreenState
                             color: Colors.black54,
                           ),
                         ),
-                        Text(
-                          '₱${pricePerKg.toStringAsFixed(2)}/kg',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                        if (!isDonateMode) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            'Total: ₱${(itemWeight * (entry.value['price_per_kg'] ?? 0.0)).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green[700],
+                            ),
                           ),
-                        ),
-                        Text(
-                          'Total: ₱${totalPriceForItem.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green[700],
-                          ),
-                        ),
+                        ]
                       ],
                     ),
                   ],
                 ),
               );
             }).toList(),
-            const Divider(
-              height: 30,
-              thickness: 1,
-              color: Colors.grey,
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total Estimated Profit',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+            if (!isDonateMode) ...[
+              const Divider(
+                height: 30,
+                thickness: 1,
+                color: Colors.grey,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total Estimated Profit',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                Text(
-                  '₱${totalEstimatedProfit.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green[700],
+                  Text(
+                    '₱${totalEstimatedProfit.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[700],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Collection Fee',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black54,
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Collection Fee',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black54,
+                    ),
                   ),
-                ),
-                Text(
-                  '-₱${collectionFee.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black54,
+                  Text(
+                    '-₱${collectionFee.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black54,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ]
           ],
         ),
       ),
@@ -430,27 +448,29 @@ class _BookingPreviewAndScheduleScreenState
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Total Price',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          if (!isDonateMode) ...[
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total Price',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Text(
-                '₱${totalPrice.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                Text(
+                  '₱${totalPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ]
         ],
       ),
     );

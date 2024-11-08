@@ -78,8 +78,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
         bookingHistory.add({
           'date': bookingData['date'] ?? DateTime.now(),
           'bookingId': bookingId,
-          'driver': bookingData['driver'] ?? 'Unknown Driver',
-          'vehicle': bookingData['vehicle'] ?? 'Unknown Vehicle',
+          'driver': bookingData['driver'] ?? 'Not yet assigned',
+          'vehicle': bookingData['vehicle'] ?? 'Not yet assigned',
           'status': userData['status'] ?? 'pending',
           'recyclables': recyclables,
           'final_weight': finalWeight,

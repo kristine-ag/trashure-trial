@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:trashure/components/firebase_options.dart';
 
@@ -40,6 +41,33 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
     'TUGBOK'
   ];
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
+
+  @override
+  void initState() {
+    super.initState();
+    _requestLocationPermission();
+  }
+
+  Future<void> _requestLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      Position position = await Geolocator.getCurrentPosition();
+      final userLocation = LatLng(position.latitude, position.longitude);
+      _addMarker(userLocation, "Your Location");
+      mapController?.animateCamera(CameraUpdate.newLatLng(userLocation));
+      await _getAddressFromLatLng(userLocation);
+      setState(() {
+        _selectedLocation = userLocation;
+      });
+    } else {
+      _showAlertDialog("Location permission is required to proceed.");
+    }
+  }
 
   @override
   void dispose() {
@@ -142,7 +170,6 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
 
   Future<void> _saveContactInfo() async {
     if (_formKey.currentState?.validate() != true) {
-      // Show an error message if form validation fails
       _showAlertDialog('Please complete all required fields.');
       return;
     }
@@ -210,13 +237,11 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                                 TextFormField(
                                   controller: _addressController,
                                   decoration: InputDecoration(
-                                    labelText: 'Address',
+                                    labelText:
+                                        'Address (Please click on the map)',
                                     border: OutlineInputBorder(),
                                   ),
-                                  onFieldSubmitted: (value) {
-                                    _getLatLngFromAddress(
-                                        value);
-                                  },
+                                  readOnly: true,
                                 ),
                                 const SizedBox(height: 16.0),
                                 TextFormField(
@@ -257,6 +282,8 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                                   child: Text('Save'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.teal[800],
+                                    foregroundColor:
+                                        Colors.white, // Set text color to white
                                     minimumSize: Size(double.infinity, 50),
                                   ),
                                 ),
@@ -325,10 +352,7 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                                     labelText: 'Address',
                                     border: OutlineInputBorder(),
                                   ),
-                                  onFieldSubmitted: (value) {
-                                    _getLatLngFromAddress(
-                                        value); // Call your method when Enter is pressed
-                                  },
+                                  readOnly: true,
                                 ),
                                 const SizedBox(height: 16.0),
                                 TextFormField(

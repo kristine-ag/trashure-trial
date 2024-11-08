@@ -1,10 +1,47 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart'; // For rendering Markdown
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:trashure/components/appbar.dart';
 import 'package:trashure/components/footer.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Marker> _warehouseMarkers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWarehouseLocations();
+  }
+
+  Future<void> _fetchWarehouseLocations() async {
+    final CollectionReference branchCollection =
+        FirebaseFirestore.instance.collection('branch');
+
+    final QuerySnapshot snapshot = await branchCollection.get();
+    final markers = snapshot.docs.map((doc) {
+      GeoPoint geoPoint = doc['location'];
+      return Marker(
+        markerId: MarkerId(doc.id),
+        position: LatLng(geoPoint.latitude, geoPoint.longitude),
+        infoWindow: InfoWindow(
+          title: doc['area'] ?? 'Warehouse',
+          snippet: doc['address'] ?? '',
+        ),
+      );
+    }).toList();
+
+    setState(() {
+      _warehouseMarkers = markers;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,17 +54,16 @@ class HomeScreen extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  _buildBanner(context), // Existing banner
+                  _buildBanner(context),
                   const SizedBox(height: 20),
-                  _buildStepByStepGuide(
-                      context), // Updated interactive step-by-step guide
+                  _buildDirectDeliverySection(context),
                   const SizedBox(height: 40),
-                  _buildMaterialTypesSection(
-                      context), // Updated section for materials
+                  _buildStepByStepGuide(context),
+                  const SizedBox(height: 40),
+                  _buildMaterialTypesSection(context),
                   const SizedBox(height: 40),
                   Divider(
-                    color: Colors.grey[
-                        400], // Divider color to separate the body from the Footer
+                    color: Colors.grey[400],
                     thickness: 1,
                     height: 1,
                   ),
@@ -47,11 +83,9 @@ class HomeScreen extends StatelessWidget {
         Image.asset(
           'assets/images/login.jpg', // Replace with your image path
           width: double.infinity,
-          height:
-              MediaQuery.of(context).size.height * 1, // Use relative height
+          height: MediaQuery.of(context).size.height * 1, // Use relative height
           fit: BoxFit.cover,
         ),
-        // Gradient overlay to add a green tint
         Positioned.fill(
           child: Container(
             decoration: BoxDecoration(
@@ -66,7 +100,6 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
-        // Text Overlay
         Positioned.fill(
           child: Align(
             alignment: Alignment.topRight,
@@ -80,7 +113,7 @@ class HomeScreen extends StatelessWidget {
                     'Join the solution with Trashure:',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 30, // Reduce font size for smaller screens
+                      fontSize: 30,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -90,7 +123,7 @@ class HomeScreen extends StatelessWidget {
                     'Sell your segregated trash and earn money.',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24, // Adjust font size
+                      fontSize: 24,
                       fontWeight: FontWeight.normal,
                     ),
                     textAlign: TextAlign.center,
@@ -100,7 +133,7 @@ class HomeScreen extends StatelessWidget {
                     'Together, we can create a cleaner, greener planet!',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24, // Adjust font size
+                      fontSize: 24,
                       fontWeight: FontWeight.normal,
                     ),
                     textAlign: TextAlign.center,
@@ -112,7 +145,7 @@ class HomeScreen extends StatelessWidget {
                     },
                     style: ElevatedButton.styleFrom(
                       foregroundColor: Colors.green,
-                      backgroundColor: Colors.white, // Button background color
+                      backgroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24.0,
                         vertical: 12.0,
@@ -135,6 +168,44 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDirectDeliverySection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Direct Delivery to Warehouse',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.green,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Want to save on the ₱40 collection fee? Deliver your segregated recyclables directly to our warehouse and avoid the pickup cost. Find the nearest warehouse on the map below!',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 300,
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: LatLng(7.0676398240087766, 125.61457750980887),
+                zoom: 12,
+              ),
+              markers: Set.from(_warehouseMarkers),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -274,19 +345,18 @@ They will verify the weight and quality of the recyclables, after which the paym
       length: 3, // Number of tabs: Plastic, Metal, Glass
       child: Column(
         children: [
-          TabBar(
+          const TabBar(
             labelColor: Colors.green,
             unselectedLabelColor: Colors.black,
             indicatorColor: Colors.green,
-            tabs: const [
+            tabs: [
               Tab(text: 'Plastic'),
               Tab(text: 'Metal'),
               Tab(text: 'Glass'),
             ],
           ),
           SizedBox(
-            height:
-                MediaQuery.of(context).size.height * 0.5, // Use relative height
+            height: MediaQuery.of(context).size.height * 0.5,
             child: TabBarView(
               children: [
                 _buildPlasticTypesGrid(context),
@@ -311,7 +381,7 @@ They will verify the weight and quality of the recyclables, after which the paym
           'assets/recyclables/PET2.jpg',
           'assets/recyclables/PET3.jpg',
           'assets/recyclables/PET4.jpg'
-        ], 
+        ],
       },
       {
         'title': 'HDPE (High-Density Polyethylene)',
@@ -594,7 +664,7 @@ class MaterialDetailsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: Colors.green, // Adjust the color as needed
+        backgroundColor: Colors.green,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
