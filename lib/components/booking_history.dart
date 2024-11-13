@@ -22,7 +22,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
       return;
     }
 
-    await for (var bookingsSnapshot in FirebaseFirestore.instance.collection('bookings').snapshots()) {
+    await for (var bookingsSnapshot
+        in FirebaseFirestore.instance.collection('bookings').snapshots()) {
       List<Map<String, dynamic>> bookingHistory = [];
 
       if (bookingsSnapshot.docs.isEmpty) {
@@ -84,6 +85,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           'recyclables': recyclables,
           'final_weight': finalWeight,
           'final_item_price': finalItemPrice,
+          'final_total_weight': userData['final_total_weight'] ?? 0.0,
+          'final_total_price': userData['final_total_price'] ?? 0.0,
         });
       }
 
@@ -92,7 +95,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     }
   }
 
-  Widget _buildBookingTable(List<Map<String, dynamic>> bookings, bool isDesktop) {
+  Widget _buildBookingTable(
+      List<Map<String, dynamic>> bookings, bool isDesktop) {
     return Column(
       children: bookings.map((booking) {
         return Card(
@@ -108,14 +112,17 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   ? Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(DateFormat('MM/dd/yyyy').format((booking['date'] as Timestamp).toDate())),
+                        Text(DateFormat('MM/dd/yyyy')
+                            .format((booking['date'] as Timestamp).toDate())),
                         Text(booking['bookingId'] ?? 'N/A'),
                         Text(booking['driver']),
                         Text(booking['vehicle']),
                         Text(
                           booking['status'],
                           style: TextStyle(
-                            color: booking['status'] == 'collected' ? Colors.green : Colors.orange,
+                            color: booking['status'] == 'collected'
+                                ? Colors.green
+                                : Colors.orange,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -135,7 +142,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                         Text(
                           'Status: ${booking['status']}',
                           style: TextStyle(
-                            color: booking['status'] == 'collected' ? Colors.green : Colors.orange,
+                            color: booking['status'] == 'collected'
+                                ? Colors.green
+                                : Colors.orange,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -151,7 +160,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   children: [
                     const Text(
                       'Recyclables',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const SizedBox(height: 8),
                     Table(
@@ -168,19 +178,27 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                           children: [
                             const Padding(
                               padding: EdgeInsets.all(8.0),
-                              child: Text('Type', style: TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text('Type',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                             ),
                             const Padding(
                               padding: EdgeInsets.all(8.0),
-                              child: Text('Weight', style: TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text('Weight',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                             ),
                             const Padding(
                               padding: EdgeInsets.all(8.0),
-                              child: Text('Price per kg', style: TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text('Price per kg',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                             ),
                             const Padding(
                               padding: EdgeInsets.all(8.0),
-                              child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text('Total',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -193,15 +211,27 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                               ),
                               Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: Text('${recyclable['weight'] ?? 0} kg'),
+                                child: Text(
+                                  booking['status'] == 'collected'
+                                      ? '${recyclable['weight'] ?? 0} kg  / collected: ${recyclable['final_weight'] ?? 0} kg'
+                                      : '${recyclable['weight'] ?? 0} kg',
+                                ),
                               ),
                               Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: Text('₱${recyclable['price'] ?? 0}'),
+                                child: Text(
+                                  booking['status'] == 'collected'
+                                      ? '₱${recyclable['price'] ?? 0}  / paid: ₱${recyclable['final_item_price'] ?? 0}'
+                                      : '₱${recyclable['price'] ?? 0}',
+                                ),
                               ),
                               Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: Text('₱${((recyclable['weight'] ?? 0) * (recyclable['price'] ?? 0)).toStringAsFixed(2)}'),
+                                child: Text(
+                                  booking['status'] == 'collected'
+                                      ? '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}  / paid: ₱${((recyclable['final_item_price'] ?? 0)).toStringAsFixed(2)}'
+                                      : '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}',
+                                ),
                               ),
                             ],
                           );
@@ -210,12 +240,18 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Total Weight: ${booking['final_weight']} kg',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      booking['status'] == 'collected'
+                          ? 'Total Weight Collected: ${booking['final_total_weight']} kg'
+                          : 'Total Weight: ${booking['final_weight']} kg',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     Text(
-                      'Total Price: ₱${booking['final_item_price']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      booking['status'] == 'collected'
+                          ? 'Total Price Received: ₱${booking['final_total_price']}'
+                          : 'Total Price: ₱${booking['final_item_price']}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ],
                 ),
@@ -231,12 +267,16 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Booking History'),
+        iconTheme: IconThemeData(color: Colors.white),
+        title: const Text(
+          'Booking History',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: Colors.teal,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          bool isDesktop = constraints.maxWidth > 600;
+          bool isDesktop = constraints.maxWidth > 700;
           return StreamBuilder<List<Map<String, dynamic>>>(
             stream: _bookingHistoryStream(),
             builder: (context, snapshot) {
@@ -244,7 +284,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return const Center(child: Text('Error fetching booking history.'));
+                return const Center(
+                    child: Text('Error fetching booking history.'));
               }
 
               if (snapshot.hasData) {

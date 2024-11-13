@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +8,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:trashure/components/booking_history.dart';
 import 'package:trashure/components/firebase_options.dart';
 import 'package:trashure/screens/bookpreview_screen.dart';
 import 'package:flutter/services.dart';
@@ -26,7 +24,6 @@ class BookingScreen extends StatefulWidget {
 class _BookingScreenState extends State<BookingScreen> {
   bool get isDonateMode => widget.mode == 'donate';
   final user = FirebaseAuth.instance.currentUser;
-  Map<String, dynamic> _currentBookingDetails = {};
   final Map<String, ValueNotifier<double>> _productQuantities = {};
   final Map<String, double> _productPrices = {};
   final Map<String, Timestamp> _productTimestamps = {};
@@ -47,8 +44,7 @@ class _BookingScreenState extends State<BookingScreen> {
       TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
   final TextEditingController _contactController = TextEditingController();
-  bool _canBook = true;
-  int? _daysLeft;
+
   final List<String> _areas = [
     'POBLACION',
     'TALOMO',
@@ -72,14 +68,16 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
+  CameraPosition _cameraPosition = CameraPosition(
+    target: LatLng(7.0731, 125.6122),
+    zoom: 15,
+  );
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _fetchAddressFromFirestore();
-      await _getUserLocation();
-      await _checkBookingAvailability();
-      await _fetchCurrentBooking(); // Add this line
     });
   }
 
@@ -112,6 +110,7 @@ class _BookingScreenState extends State<BookingScreen> {
             _defaultAddressController.text = fetchedAddress;
             _contactController.text = fetchedContact;
             currentPosition = fetchedLatLng;
+            _cameraPosition = CameraPosition(target: fetchedLatLng, zoom: 15);
           });
 
           mapController?.animateCamera(CameraUpdate.newLatLng(fetchedLatLng));
@@ -221,43 +220,6 @@ class _BookingScreenState extends State<BookingScreen> {
     _totalEstimatedProfit.value = totalProfit;
   }
 
-  Future<bool> _checkIfUserHasPendingBooking() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return false;
-
-    try {
-      final bookingsSnapshot =
-          await FirebaseFirestore.instance.collection('bookings').get();
-      for (var bookingDoc in bookingsSnapshot.docs) {
-        final userDocSnapshot =
-            await bookingDoc.reference.collection('users').doc(userId).get();
-        if (userDocSnapshot.exists) {
-          String userStatus = userDocSnapshot['status'] ?? '';
-          if (userStatus == 'booked') {
-            Timestamp bookingDateTimestamp = bookingDoc['date'];
-            DateTime bookingDate = bookingDateTimestamp.toDate();
-            DateTime currentDate = DateTime.now();
-            _daysLeft = bookingDate.difference(currentDate).inDays;
-
-            setState(() {
-              _canBook = false;
-              _currentBookingDetails = {
-                'date': bookingDate,
-                'daysLeft': _daysLeft,
-                'start_time': bookingDoc['start_time'],
-                'end_time': bookingDoc['end_time'],
-              };
-            });
-            return true;
-          }
-        }
-      }
-    } catch (e) {
-      print('Error checking pending bookings: $e');
-    }
-    return false;
-  }
-
   Future<String> _fetchImageFromFirebaseStorage(String fileName) async {
     try {
       final ref =
@@ -281,129 +243,15 @@ class _BookingScreenState extends State<BookingScreen> {
     });
   }
 
-  Future<void> _checkBookingAvailability() async {
-    bool hasPendingBooking = await _checkIfUserHasPendingBooking();
-    setState(() {
-      _canBook = !hasPendingBooking;
-    });
-  }
-
-  Future<void> _fetchCurrentBooking() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
-
-    try {
-      // Retrieve booking documents that contain the user's ID
-      final bookingsSnapshot = await FirebaseFirestore.instance
-          .collection('bookings')
-          .where('users.$userId.uid', isEqualTo: userId)
-          .get();
-
-      if (bookingsSnapshot.docs.isNotEmpty) {
-        print("Found bookings for user");
-
-        for (var bookingDoc in bookingsSnapshot.docs) {
-          final bookingData = bookingDoc.data();
-          print("Booking data: $bookingData");
-
-          // Fetch user-specific data from the 'users' sub-collection
-          final userDocSnapshot =
-              await bookingDoc.reference.collection('users').doc(userId).get();
-
-          if (userDocSnapshot.exists) {
-            print("User document exists in booking");
-
-            // Initialize an empty list for recyclables
-            List<Map<String, dynamic>> recyclables = [];
-
-            // Fetch recyclables data from the 'recyclables' sub-collection
-            final recyclablesSnapshot =
-                await userDocSnapshot.reference.collection('recyclables').get();
-
-            print(
-                "Recyclables data found: ${recyclablesSnapshot.docs.length} items");
-
-            for (var recyclableDoc in recyclablesSnapshot.docs) {
-              recyclables.add({
-                'type': recyclableDoc['type'] ?? 'Unknown',
-                'price': recyclableDoc['price'] ?? '0',
-                'quantity': recyclableDoc['quantity'] ?? '0',
-                'item_price': recyclableDoc['item_price'] ?? 0.0,
-                'weight': recyclableDoc['weight'] ?? 0.0,
-              });
-            }
-
-            // Populate _currentBookingDetails with all data
-            setState(() {
-              _currentBookingDetails = {
-                'date': bookingData['date']?.toDate(),
-                'driver': bookingData['driver'] ?? 'N/A',
-                'vehicle': bookingData['vehicle'] ?? 'N/A',
-                'start_time': bookingData['start_time'] ?? 'N/A',
-                'end_time': bookingData['end_time'] ?? 'N/A',
-                'location': bookingData['location'] ?? 'N/A',
-                'total_price': userDocSnapshot['total_price'] ?? 0.0,
-                'total_weight': userDocSnapshot['total_weight'] ?? 0.0,
-                'address': userDocSnapshot['address'] ?? 'N/A',
-                'area': userDocSnapshot['area'] ?? 'N/A',
-                'recyclables': recyclables,
-              };
-
-              print("Current booking details: $_currentBookingDetails");
-            });
-            break;
-          } else {
-            print("User document does not exist in booking");
-          }
-        }
-      } else {
-        print('No booking found for the user.');
-      }
-    } catch (e) {
-      print('Error fetching current booking: $e');
-    }
-  }
+  
 
   @override
   Widget build(BuildContext context) {
     if (user == null) return _buildLoginPrompt(context);
 
-    if (!_canBook) {
-      return Scaffold(
-        appBar: CustomAppBar(),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'You have a pending booking.',
-                  style: TextStyle(fontSize: 20, color: Colors.red),
-                ),
-                const SizedBox(height: 10),
-                _buildBookingDetailsTable(),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                const BookingHistoryScreen()));
-                  },
-                  child: const Text('View Booking History'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        bool isMobile = constraints.maxWidth < 600;
+        bool isMobile = constraints.maxWidth < 700;
 
         return FutureBuilder<List<DocumentSnapshot>>(
           future:
@@ -477,7 +325,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         ),
                       ),
                       Container(
-                        height: isMobile ? 800 : 600,
+                        height: isMobile ? 300 : 600,
                         child: TabBarView(
                           children: categories.map((categoryDoc) {
                             final categoryName = categoryDoc['category_name'];
@@ -589,11 +437,11 @@ class _BookingScreenState extends State<BookingScreen> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => BookingPreviewScreen(
-                                selectedItems: selectedItems,
-                                address: fullAddress,
-                                contact: contact,
-                                district: _selectedArea!, mode: isDonateMode ? 'donate' : 'sell'
-                              ),
+                                  selectedItems: selectedItems,
+                                  address: fullAddress,
+                                  contact: contact,
+                                  district: _selectedArea!,
+                                  mode: isDonateMode ? 'donate' : 'sell'),
                             ),
                           );
                         },
@@ -641,159 +489,6 @@ class _BookingScreenState extends State<BookingScreen> {
     }
 
     return categoriesWithProducts;
-  }
-
-  Widget _buildBookingDetailsTable() {
-    print(
-        "_currentBookingDetails in _buildBookingDetailsTable: $_currentBookingDetails");
-
-    final bookingDate = _currentBookingDetails['date'];
-    final formattedBookingDate = bookingDate is Timestamp
-        ? DateFormat('MM/dd/yyyy').format(bookingDate.toDate())
-        : bookingDate is DateTime
-            ? DateFormat('MM/dd/yyyy').format(bookingDate)
-            : 'N/A';
-
-    final booking = {
-      'date': formattedBookingDate,
-      'bookingId': _currentBookingDetails['bookingId'] ?? 'N/A',
-      'driver': _currentBookingDetails['driver'] ?? 'N/A',
-      'vehicle': _currentBookingDetails['vehicle'] ?? 'N/A',
-      'status': 'booked', // Assuming status is 'booked' for the current booking
-      'recyclables': _currentBookingDetails['recyclables'] ?? [],
-      'final_weight': _currentBookingDetails['total_weight'] ?? 0.0,
-      'final_item_price': _currentBookingDetails['total_price'] ?? 0.0,
-    };
-
-    return Column(
-      children: [
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: ExpansionTile(
-            backgroundColor: Colors.grey[100],
-            title: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Date: $formattedBookingDate',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text('Booking ID: ${booking['bookingId']}'),
-                  Text('Driver: ${booking['driver']}'),
-                  Text('Vehicle: ${booking['vehicle']}'),
-                  Text(
-                    'Status: ${booking['status']}',
-                    style: TextStyle(
-                      color: booking['status'] == 'collected'
-                          ? Colors.green
-                          : Colors.orange,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            children: [
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Recyclables',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    Table(
-                      columnWidths: const {
-                        0: FlexColumnWidth(3),
-                        1: FlexColumnWidth(2),
-                        2: FlexColumnWidth(2),
-                        3: FlexColumnWidth(2),
-                      },
-                      border: TableBorder.all(color: Colors.grey, width: 0.5),
-                      children: [
-                        TableRow(
-                          decoration: BoxDecoration(color: Colors.grey[300]),
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Type',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Weight',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Price per kg',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Total',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        ...booking['recyclables'].map<TableRow>((recyclable) {
-                          return TableRow(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(recyclable['type'] ?? 'Unknown'),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text('${recyclable['weight'] ?? 0} kg'),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text('₱${recyclable['price'] ?? 0}'),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                    '₱${((recyclable['weight'] ?? 0) * (recyclable['price'] ?? 0)).toStringAsFixed(2)}'),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Total Weight: ${booking['final_weight']} kg',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    Text(
-                      'Total Price: ₱${booking['final_item_price']}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildProductsSection(
@@ -915,6 +610,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
                   final imageUrl = snapshot.data!;
                   return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         flex: isMobile ? 4 : 3,
@@ -934,19 +630,33 @@ class _BookingScreenState extends State<BookingScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(title,
-                                style: TextStyle(
-                                    fontSize: isMobile ? 16 : 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black)),
+                            Text(
+                              title,
+                              style: TextStyle(
+                                fontSize: isMobile ? 16 : 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
                             const SizedBox(height: 5),
                             Text(
-                              _truncateDescription(description, 20),
+                              _truncateDescription(description,
+                                  isMobile ? 15 : 20), // 10 words for mobile
                               style: TextStyle(
-                                fontSize: isMobile ? 12 : 14,
+                                fontSize: isMobile ? 10 : 12,
                                 color: Colors.grey[700],
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            if (isMobile)
+                              Text(
+                                '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -956,9 +666,10 @@ class _BookingScreenState extends State<BookingScreen> {
                           child: Text(
                             '₱ ${pricePerKg.toStringAsFixed(2)} / kg',
                             style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
                             textAlign: TextAlign.end,
                           ),
                         ),
@@ -966,16 +677,6 @@ class _BookingScreenState extends State<BookingScreen> {
                   );
                 },
               ),
-              if (isMobile)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('₱ ${pricePerKg.toStringAsFixed(2)} / kg',
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black),
-                      textAlign: TextAlign.center),
-                ),
               Divider(thickness: 1, color: Colors.green[100]),
               ValueListenableBuilder<double>(
                 valueListenable: _productQuantities[title]!,
@@ -991,38 +692,50 @@ class _BookingScreenState extends State<BookingScreen> {
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Enter weight:',
                             style: TextStyle(
                                 fontSize: 16, color: Colors.grey[700]),
                           ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            height: 40,
-                            width: 100,
-                            child: TextField(
-                              controller: weightController,
-                              keyboardType: TextInputType.numberWithOptions(
-                                  decimal: true),
-                              textAlign: TextAlign.center,
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(5),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              SizedBox(
+                                height: 40,
+                                width: 100,
+                                child: TextField(
+                                  controller: weightController,
+                                  keyboardType: TextInputType.numberWithOptions(
+                                      decimal: true),
+                                  textAlign: TextAlign.center,
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  onChanged: (value) {
+                                    double? newWeight = double.tryParse(value);
+                                    if (newWeight != null) {
+                                      newWeight = double.parse(
+                                          newWeight.toStringAsFixed(2));
+                                      _productQuantities[title]!.value =
+                                          newWeight;
+                                      _updateTotalEstimatedProfit();
+                                    }
+                                  },
                                 ),
-                                contentPadding: EdgeInsets.zero,
                               ),
-                              onChanged: (value) {
-                                double? newWeight = double.tryParse(value);
-                                if (newWeight != null) {
-                                  newWeight = double.parse(
-                                      newWeight.toStringAsFixed(2));
-                                  _productQuantities[title]!.value = newWeight;
-                                  _updateTotalEstimatedProfit();
-                                }
-                              },
-                            ),
+                              const SizedBox(width: 5),
+                              Text(
+                                "kg",
+                                style: TextStyle(
+                                    fontSize: 16, color: Colors.grey[700]),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1069,9 +782,13 @@ class _BookingScreenState extends State<BookingScreen> {
               child: GoogleMap(
                 onMapCreated: (controller) {
                   mapController = controller;
+                  // Move camera to user's saved position if available
+                  if (currentPosition != null) {
+                    mapController?.animateCamera(
+                        CameraUpdate.newLatLng(currentPosition!));
+                  }
                 },
-                initialCameraPosition: CameraPosition(
-                    target: currentPosition ?? _initialPosition, zoom: 15),
+                initialCameraPosition: _cameraPosition,
                 markers: _markers,
                 onTap: (LatLng position) async {
                   setState(() {
@@ -1107,9 +824,13 @@ class _BookingScreenState extends State<BookingScreen> {
                 child: GoogleMap(
                   onMapCreated: (controller) {
                     mapController = controller;
+                    // Move camera to user's saved position if available
+                    if (currentPosition != null) {
+                      mapController?.animateCamera(
+                          CameraUpdate.newLatLng(currentPosition!));
+                    }
                   },
-                  initialCameraPosition: CameraPosition(
-                      target: currentPosition ?? _initialPosition, zoom: 15),
+                  initialCameraPosition: _cameraPosition,
                   markers: _markers,
                   onTap: (LatLng position) async {
                     setState(() {

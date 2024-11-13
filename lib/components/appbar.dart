@@ -10,7 +10,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Check if the screen width is larger than a typical mobile screen
-        bool isDesktop = constraints.maxWidth > 600;
+        bool isDesktop = constraints.maxWidth > 700;
 
         return AppBar(
           backgroundColor: Colors.white,
@@ -34,7 +34,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
           actions: isDesktop
               ? _buildDesktopActions(context) // Show all items if desktop
-              : _buildMobileActions(context), // Use Drawer or PopupMenu if mobile
+              : _buildMobileActions(
+                  context), // Use Drawer or PopupMenu if mobile
         );
       },
     );
@@ -44,11 +45,15 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   List<Widget> _buildDesktopActions(BuildContext context) {
     return [
       _buildAppBarItem(context, 'Home'),
+      _buildAppBarItem(context, 'Awareness'),
       _buildAppBarItem(context, 'Book'),
       _buildAppBarItem(context, 'Pricing'),
       if (user != null)
         FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance.collection('users').doc(user!.uid).get(),
+          future: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user!.uid)
+              .get(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
@@ -67,9 +72,10 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             }
 
             final userData = snapshot.data?.data() as Map<String, dynamic>?;
-            final userName = userData != null && userData.containsKey('firstName')
-                ? userData['firstName']
-                : 'User';
+            final userName =
+                userData != null && userData.containsKey('firstName')
+                    ? userData['firstName']
+                    : 'User';
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -78,7 +84,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () {
-                      Navigator.pushNamed(context, '/Profile'); // Navigate to Profile Screen
+                      Navigator.pushNamed(
+                          context, '/Profile'); // Navigate to Profile Screen
                     },
                     child: Text(
                       userName,
@@ -114,14 +121,34 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     ];
   }
 
-  // Mobile Actions: Popup menu or Drawer for small screens
+// Mobile Actions: Popup menu or Drawer for small screens
   List<Widget> _buildMobileActions(BuildContext context) {
     return [
-      if (user != null) _buildUserName(context),
+      if (user != null)
+        _buildUserName(context)
+      else
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/login');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[400],
+            ),
+            child: const Row(
+              children: [
+                Text('Login'),
+              ],
+            ),
+          ),
+        ),
       PopupMenuButton<String>(
         onSelected: (value) {
           if (value == 'Home') {
             Navigator.pushNamed(context, '/');
+          } else if (value == 'Awareness') {
+            Navigator.pushNamed(context, '/awareness');
           } else if (value == 'Book') {
             Navigator.pushNamed(context, '/Book');
           } else if (value == 'Pricing') {
@@ -132,6 +159,10 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           const PopupMenuItem(
             value: 'Home',
             child: Text('Home'),
+          ),
+          const PopupMenuItem(
+            value: 'Awareness',
+            child: Text('Awareness'),
           ),
           const PopupMenuItem(
             value: 'Book',
@@ -149,7 +180,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   // Function to build the username widget in the app bar
   Widget _buildUserName(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(user!.uid).get(),
+      future:
+          FirebaseFirestore.instance.collection('users').doc(user!.uid).get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -202,6 +234,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         onPressed: () {
           if (title == 'Home') {
             Navigator.pushNamed(context, '/');
+          } else if (title == 'Awareness') {
+            Navigator.pushNamed(context, '/awareness');
           } else if (title == 'Book') {
             Navigator.pushNamed(context, '/Book');
           } else if (title == 'Pricing') {

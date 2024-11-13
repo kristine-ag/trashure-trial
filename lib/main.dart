@@ -3,8 +3,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:trashure/components/awareness.dart';
+import 'package:trashure/components/booking_history.dart';
 import 'package:trashure/components/booking_selection.dart';
-import 'package:trashure/screens/booking_screen.dart';
 import 'package:trashure/screens/pricing_screen.dart';
 import 'package:trashure/screens/profile_screen.dart';
 import 'components/firebase_options.dart';
@@ -40,8 +41,8 @@ class MyApp extends StatelessWidget {
         '/Book': (context) => SelectionScreen(),
         '/Pricing': (context) => PricingScreen(),
         '/Profile': (context) => ProfileScreen(),
-
-
+        '/history': (context) => BookingHistoryScreen(),
+        '/awareness': (context) => SustainabilityAwarenessPage(),
       },
     );
   }

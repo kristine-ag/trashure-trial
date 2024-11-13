@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart'; // For user details
 import 'package:intl/intl.dart'; // For formatting dates
 import 'package:trashure/screens/bookconfirm_screen.dart';
 import '../components/appbar.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 
 class BookingPreviewScreen extends StatefulWidget {
   final String mode;
@@ -38,18 +40,55 @@ class _BookingPreviewAndScheduleScreenState
   @override
   void initState() {
     super.initState();
+    tz.initializeTimeZones();
     fetchUserBookedDates();
+  }
+
+  // Helper method to get the current Philippine time
+  tz.TZDateTime getPhilippineTime() {
+    final location = tz.getLocation('Asia/Manila');
+    return tz.TZDateTime.now(location);
+  }
+
+  // Fetch only bookings that are not within one day of the current time past 5 PM
+  Future<List<DocumentSnapshot>> _getFilteredBookings() async {
+    final bookingsSnapshot =
+        await FirebaseFirestore.instance.collection('bookings').get();
+
+    // Get current Philippine time and set it to 5 PM
+    final nowInPhilippines = getPhilippineTime();
+    final todayAt5PM = tz.TZDateTime(
+      nowInPhilippines.location,
+      nowInPhilippines.year,
+      nowInPhilippines.month,
+      nowInPhilippines.day,
+      17, // 5 PM
+    );
+
+    return bookingsSnapshot.docs.where((doc) {
+      final bookingDate = (doc['date'] as Timestamp).toDate();
+      final bookingDateInTZ =
+          tz.TZDateTime.from(bookingDate, nowInPhilippines.location);
+      final timeDifference =
+          bookingDateInTZ.difference(nowInPhilippines).inHours;
+      final isWithinOneDay = timeDifference < 24;
+      final isPast5PMToday = nowInPhilippines.isAfter(todayAt5PM);
+
+      return !(isWithinOneDay && isPast5PMToday);
+    }).toList();
   }
 
   Stream<QuerySnapshot> fetchBookings() {
     DateTime currentDate = DateTime.now();
+    DateTime startOfDay = DateTime(currentDate.year, currentDate.month,
+        currentDate.day); // Start of today's date
     return FirebaseFirestore.instance
         .collection('bookings')
-        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(currentDate))
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
         .snapshots();
   }
 
-  // Function to fetch booking IDs where the user has already booked
+// Function to fetch booking IDs where the user has already booked
   void fetchUserBookedDates() async {
     final User? user = _auth.currentUser;
     if (user == null) {
@@ -143,8 +182,8 @@ class _BookingPreviewAndScheduleScreenState
         Map<String, dynamic> recyclableData = {
           'type': entry.key,
           'weight': weight,
-          'price': donated, 
-          'item_price': donated, 
+          'price': pricePerKg,
+          'item_price': itemPrice,
           'timestamp':
               (entry.value['price_timestamp'] as Timestamp?)?.toDate() ??
                   DateTime.now(),
@@ -156,10 +195,6 @@ class _BookingPreviewAndScheduleScreenState
         if (!isDonateMode) {
           recyclableData['original_price'] =
               entry.value['original_price'] ?? 0.0;
-          recyclableData['price'] =
-              entry.value[pricePerKg] ?? 0.0;
-          recyclableData['item_price'] =
-              entry.value[itemPrice] ?? 0.0;
         }
 
         // Add each recyclable item with the conditional fields
@@ -177,19 +212,27 @@ class _BookingPreviewAndScheduleScreenState
       // Commit all the changes
       await batch.commit();
 
+      // Update the user's status in the main `users` collection
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'status': 'booked',
+      });
+
       // Calculate and update the booking document's overall price and weight
       final usersSnapshot = await bookingRef.collection('users').get();
       double overallPrice = 0;
       double overallWeight = 0;
+      double calculatedOverallPrice = 0;
       for (var userDoc in usersSnapshot.docs) {
         final userData = userDoc.data() as Map<String, dynamic>;
         overallPrice += userData['total_price'] ?? 0;
         overallWeight += userData['total_weight'] ?? 0;
+        calculatedOverallPrice += userData['calculated_total_price'];
       }
 
       await bookingRef.update({
         'overall_price': overallPrice,
         'overall_weight': overallWeight,
+        'calculated_overall_price': calculatedOverallPrice,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -198,7 +241,11 @@ class _BookingPreviewAndScheduleScreenState
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const BookingConfirmedScreen()),
+        MaterialPageRoute(
+          builder: (context) => const BookingConfirmedScreen(
+            bookingDetails: {},
+          ),
+        ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -542,8 +589,8 @@ class _BookingPreviewAndScheduleScreenState
   }
 
   Widget _buildScheduleSection() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: fetchBookings(),
+    return FutureBuilder<List<DocumentSnapshot>>(
+      future: _getFilteredBookings(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const CircularProgressIndicator();
@@ -554,14 +601,16 @@ class _BookingPreviewAndScheduleScreenState
           return const Text('Error fetching bookings.');
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text('No bookings available.'));
         }
 
-        // Filter documents by district
-        final bookings = snapshot.data!.docs.where((doc) {
+        // Filter documents by district and status
+        final bookings = snapshot.data!.where((doc) {
           final bookingData = doc.data() as Map<String, dynamic>;
-          return bookingData['location'] == widget.district;
+          return bookingData['location'] == widget.district &&
+              (bookingData['status'] == 'pending' ||
+                  bookingData['status'] == 'collecting');
         }).toList();
 
         if (bookings.isEmpty) {

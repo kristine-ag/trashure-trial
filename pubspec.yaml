@@ -55,6 +55,9 @@ dependencies:
   flutter_markdown: ^0.7.3+2
   cached_network_image: ^3.4.1
   intl: ^0.17.0
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +83,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/
     - assets/images/
     - assets/recyclables/PET1.jpg
     - assets/recyclables/PET2.jpg
@@ -92,6 +96,16 @@ flutter:
     - assets/images/landing.jpg
     - assets/images/default_avatar.png
     - assets/images/profile_banner.png
+    - assets/images/biodegradable.jpg
+    - assets/images/garbagedump.jpg
+    - assets/images/planet.jpg
+    - assets/images/pollution.jpg
+    - assets/images/rats.jpg
+    - assets/images/recycle.jpg
+    - assets/images/recycling.jpg
+    - assets/images/segregation.jpg
+    - assets/images/turtleingest.jpg
+    - assets/images/waterpollution.jpg
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

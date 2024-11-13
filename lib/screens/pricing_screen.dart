@@ -14,10 +14,44 @@ class PricingScreen extends StatefulWidget {
 class _PricingScreenState extends State<PricingScreen> {
   User? user = FirebaseAuth.instance.currentUser;
 
+  Future<List<Map<String, dynamic>>> _fetchCategories() async {
+    try {
+      final categorySnapshot =
+          await FirebaseFirestore.instance.collection('category').get();
+
+      // Check if there are any documents in the snapshot
+      if (categorySnapshot.docs.isEmpty) {
+        print('No categories found in the database.');
+        return [];
+      }
+
+      // Log each document to confirm field names
+      return categorySnapshot.docs
+          .map((doc) {
+            print('Category Document: ${doc.data()}');
+            // Return only if 'category_name' exists
+            if (doc['category_name'] != null) {
+              return {
+                'title': doc['category_name'],
+                'category': doc['category_name']
+              };
+            }
+            print('Category name is missing in document: ${doc.id}');
+            return null;
+          })
+          .where((element) => element != null)
+          .cast<Map<String, dynamic>>()
+          .toList();
+    } catch (e) {
+      print('Error fetching categories: $e');
+      return [];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600; // Define the threshold for mobile view
+    final isMobile = screenWidth < 600;
 
     return Scaffold(
       appBar: CustomAppBar(),
@@ -27,11 +61,38 @@ class _PricingScreenState extends State<PricingScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              _buildCategorySection(context, 'PLASTICS', 'plastics', isMobile),
-              const SizedBox(height: 40),
-              _buildCategorySection(context, 'METALS', 'metals', isMobile),
-              const SizedBox(height: 40),
-              _buildCategorySection(context, 'GLASS', 'glass', isMobile),
+              // Use FutureBuilder to fetch and display categories dynamically
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _fetchCategories(),
+                builder: (context,
+                    AsyncSnapshot<List<Map<String, dynamic>>> snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const CircularProgressIndicator();
+                  }
+                  if (snapshot.hasError) {
+                    return Text('Error fetching categories: ${snapshot.error}');
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Text('No categories available.');
+                  }
+
+                  final categories = snapshot.data!;
+                  return Column(
+                    children: categories.map((category) {
+                      return Column(
+                        children: [
+                          _buildCategorySection(
+                              context,
+                              category['title'] as String,
+                              category['category'] as String,
+                              isMobile),
+                          const SizedBox(height: 40),
+                        ],
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -46,7 +107,7 @@ class _PricingScreenState extends State<PricingScreen> {
         Text(
           title,
           style: TextStyle(
-            fontSize: isMobile ? 24 : 32, // Adjust text size for mobile
+            fontSize: isMobile ? 24 : 32,
             fontWeight: FontWeight.bold,
             color: Colors.green[700],
           ),
@@ -146,7 +207,7 @@ class _PricingScreenState extends State<PricingScreen> {
             ? Text(content,
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
-            : content, 
+            : content,
       ),
     );
   }

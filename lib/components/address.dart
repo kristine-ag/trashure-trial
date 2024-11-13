@@ -204,95 +204,13 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
       appBar: AppBar(title: Text('Setup Contact Information')),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          bool isWideScreen = constraints.maxWidth > 600;
+          bool isWideScreen = constraints.maxWidth > 700;
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
             child: isWideScreen
                 ? Row(
                     children: [
-                      Expanded(
-                        flex: 4,
-                        child: SingleChildScrollView(
-                          child: Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                TextFormField(
-                                  controller: _contactController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Contact Number',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  keyboardType: TextInputType.phone,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your contact number';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 16.0),
-                                TextFormField(
-                                  controller: _addressController,
-                                  decoration: InputDecoration(
-                                    labelText:
-                                        'Address (Please click on the map)',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  readOnly: true,
-                                ),
-                                const SizedBox(height: 16.0),
-                                TextFormField(
-                                  controller: _landmarkController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Landmark (e.g., House number)',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                                const SizedBox(height: 16.0),
-                                DropdownButtonFormField<String>(
-                                  value: _selectedArea,
-                                  items: _areas
-                                      .map((area) => DropdownMenuItem(
-                                            value: area,
-                                            child: Text(area),
-                                          ))
-                                      .toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedArea = value;
-                                    });
-                                  },
-                                  decoration: InputDecoration(
-                                    labelText: 'District',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please select a district';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 20.0),
-                                ElevatedButton(
-                                  onPressed: _saveContactInfo,
-                                  child: Text('Save'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.teal[800],
-                                    foregroundColor:
-                                        Colors.white, // Set text color to white
-                                    minimumSize: Size(double.infinity, 50),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16.0),
                       Expanded(
                         flex: 6,
                         child: Container(
@@ -320,11 +238,9 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                           ),
                         ),
                       ),
-                    ],
-                  )
-                : Column(
-                    children: [
+                      const SizedBox(width: 16.0),
                       Expanded(
+                        flex: 4,
                         child: SingleChildScrollView(
                           child: Form(
                             key: _formKey,
@@ -349,7 +265,8 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                                 TextFormField(
                                   controller: _addressController,
                                   decoration: InputDecoration(
-                                    labelText: 'Address',
+                                    labelText:
+                                        'Address (PLEASE CLICK ON THE MAP)',
                                     border: OutlineInputBorder(),
                                   ),
                                   readOnly: true,
@@ -393,6 +310,7 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                                   child: Text('Save'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.teal[800],
+                                    foregroundColor: Colors.white,
                                     minimumSize: Size(double.infinity, 50),
                                   ),
                                 ),
@@ -401,7 +319,10 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16.0),
+                    ],
+                  )
+                : Column(
+                    children: [
                       Container(
                         height: MediaQuery.of(context).size.height * 0.4,
                         decoration: BoxDecoration(
@@ -426,28 +347,90 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
                           },
                         ),
                       ),
+                      const SizedBox(height: 16.0),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  controller: _contactController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Contact Number',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your contact number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16.0),
+                                TextFormField(
+                                  controller: _addressController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Address (PLEASE CLICK ON THE MAP)',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  readOnly: true,
+                                ),
+                                const SizedBox(height: 16.0),
+                                TextFormField(
+                                  controller: _landmarkController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Landmark (e.g., House number)',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 16.0),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedArea,
+                                  items: _areas
+                                      .map((area) => DropdownMenuItem(
+                                            value: area,
+                                            child: Text(area),
+                                          ))
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedArea = value;
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'District',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please select a district';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 20.0),
+                                ElevatedButton(
+                                  onPressed: _saveContactInfo,
+                                  child: Text('Save'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.teal[800],
+                                    foregroundColor: Colors.white,
+                                    minimumSize: Size(double.infinity, 50),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
           );
         },
       ),
     );
-  }
-
-  Future<void> _getLatLngFromAddress(String address) async {
-    try {
-      List<Location> locations = await locationFromAddress(address);
-      if (locations.isNotEmpty) {
-        final location = locations[0];
-        final latLng = LatLng(location.latitude, location.longitude);
-        mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
-        _addMarker(latLng, address);
-        setState(() {
-          _selectedLocation = latLng;
-        });
-      }
-    } catch (e) {
-      print('Error retrieving location from address: $e');
-    }
   }
 }

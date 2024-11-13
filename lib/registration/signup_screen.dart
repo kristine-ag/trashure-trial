@@ -19,6 +19,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
+  bool _isPasswordVisible =
+      false; // Add this variable to manage password visibility
 
   Future<void> _signup() async {
     if (_formKey.currentState!.validate()) {
@@ -226,12 +228,22 @@ class _SignupScreenState extends State<SignupScreen> {
           const SizedBox(height: 16.0),
           TextFormField(
             controller: _passwordController,
-            decoration: const InputDecoration(
+            obscureText: !_isPasswordVisible, // Toggle visibility here
+            decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: Icon(Icons.lock),
-              border: OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.lock),
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _isPasswordVisible = !_isPasswordVisible;
+                  });
+                },
+              ),
             ),
-            obscureText: true,
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Please enter your password';

@@ -1,694 +1,274 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // For rendering Markdown
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:trashure/components/appbar.dart';
-import 'package:trashure/components/footer.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:trashure/components/firebase_options.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class ContactSetupScreen extends StatefulWidget {
+  final String userId;
+
+  const ContactSetupScreen({required this.userId, Key? key}) : super(key: key);
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  _ContactSetupScreenState createState() => _ContactSetupScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  List<Marker> _warehouseMarkers = [];
+class _ContactSetupScreenState extends State<ContactSetupScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _contactController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _landmarkController = TextEditingController();
+  LatLng? _selectedLocation;
+  GoogleMapController? mapController;
+  String? currentAddress;
+  String? _selectedArea;
+  bool isLoading = true;
+  final Set<Marker> _markers = {};
+
+  final List<String> _areas = [
+    'POBLACION', 'TALOMO', 'AGDAO', 'BUHANGIN', 'BUNAWAN',
+    'PAQUIBATO', 'BAGUIO', 'CALINAN', 'MARILOG', 'TORIL', 'TUGBOK'
+  ];
 
   @override
   void initState() {
     super.initState();
-    _fetchWarehouseLocations();
+    _requestLocationPermission();
   }
 
-  Future<void> _fetchWarehouseLocations() async {
-    final CollectionReference branchCollection =
-        FirebaseFirestore.instance.collection('branch');
+  Future<void> _requestLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
 
-    final QuerySnapshot snapshot = await branchCollection.get();
-    final markers = snapshot.docs.map((doc) {
-      GeoPoint geoPoint = doc['location'];
-      return Marker(
-        markerId: MarkerId(doc.id),
-        position: LatLng(geoPoint.latitude, geoPoint.longitude),
-        infoWindow: InfoWindow(
-          title: doc['name'] ?? 'Warehouse',
-          snippet: doc['address'] ?? '',
-        ),
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      await _getUserLocation();
+    } else {
+      _showAlertDialog("Location permission is required to proceed.");
+    }
+  }
+
+  Future<void> _getUserLocation() async {
+    try {
+      Position position = await Geolocator.getCurrentPosition();
+      final userLocation = LatLng(position.latitude, position.longitude);
+
+      setState(() {
+        _selectedLocation = userLocation;
+        isLoading = false;
+      });
+
+      _addMarker(userLocation, "Your Location");
+
+      mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(userLocation, 15),
       );
-    }).toList();
 
+      await _getAddressFromLatLng(userLocation);
+    } catch (e) {
+      print("Error getting user location: $e");
+      _showAlertDialog("Failed to get current location.");
+    }
+  }
+
+  Future<void> _getAddressFromLatLng(LatLng position) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      ).timeout(
+        Duration(seconds: 10),
+        onTimeout: () => throw Exception("Timeout while fetching address."),
+      );
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final formattedAddress =
+            '${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea}, ${place.country}';
+        _updateAddressAndArea(formattedAddress);
+      } else {
+        await _fetchAddressUsingGoogleAPI(position);
+      }
+    } catch (e) {
+      print('Error fetching address with geocoding: $e');
+      await _fetchAddressUsingGoogleAPI(position);
+    }
+  }
+
+  Future<void> _fetchAddressUsingGoogleAPI(LatLng position) async {
+    final String url =
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$googleMapsApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final formattedAddress = data['results'][0]['formatted_address'];
+          _updateAddressAndArea(formattedAddress);
+        } else {
+          _showAlertDialog('No address found.');
+        }
+      } else {
+        _showAlertDialog('Error fetching address.');
+      }
+    } catch (e) {
+      print('Error fetching address using Google API: $e');
+      _showAlertDialog('Error fetching address: $e');
+    }
+  }
+
+  void _updateAddressAndArea(String formattedAddress) {
     setState(() {
-      _warehouseMarkers = markers;
+      currentAddress = formattedAddress;
+      _addressController.text = formattedAddress;
+
+      for (var area in _areas) {
+        if (formattedAddress.toUpperCase().contains(area)) {
+          _selectedArea = area;
+          break;
+        }
+      }
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: CustomAppBar(),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildBanner(context),
-                  const SizedBox(height: 20),
-                  _buildDirectDeliverySection(context),
-                  const SizedBox(height: 40),
-                  _buildStepByStepGuide(context),
-                  const SizedBox(height: 40),
-                  _buildMaterialTypesSection(context),
-                  const SizedBox(height: 40),
-                  Divider(
-                    color: Colors.grey[400],
-                    thickness: 1,
-                    height: 1,
-                  ),
-                  const Footer(),
-                ],
-              ),
-            ),
+  void _showAlertDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            child: Text('OK'),
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBanner(BuildContext context) {
-    return Stack(
-      children: [
-        Image.asset(
-          'assets/images/login.jpg', // Replace with your image path
-          width: double.infinity,
-          height: MediaQuery.of(context).size.height * 1, // Use relative height
-          fit: BoxFit.cover,
+  void _addMarker(LatLng position, String address) {
+    setState(() {
+      _markers.clear();
+      _markers.add(Marker(
+        markerId: MarkerId(position.toString()),
+        position: position,
+        infoWindow: InfoWindow(
+          title: 'Selected Location',
+          snippet: address,
         ),
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.green.withOpacity(0.8),
-                  Colors.transparent,
-                ],
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: Align(
-            alignment: Alignment.topRight,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Join the solution with Trashure:',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Sell your segregated trash and earn money.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.normal,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Together, we can create a cleaner, greener planet!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.normal,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/Book');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      backgroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0,
-                        vertical: 12.0,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
-                    ),
-                    child: const Text(
-                      'Sell/Donate Your Trash Now',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+      ));
+    });
   }
 
-  Widget _buildDirectDeliverySection(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Direct Delivery to Warehouse',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.green,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Want to save on the ₱40 collection fee? Deliver your segregated recyclables directly to our warehouse and avoid the pickup cost. Find the nearest warehouse on the map below!',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black,
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 300,
-            child: GoogleMap(
-              initialCameraPosition: const CameraPosition(
-                target: LatLng(10.3157, 123.8854),
-                zoom: 12,
-              ),
-              markers: Set.from(_warehouseMarkers),
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _saveContactInfo() async {
+    if (_formKey.currentState?.validate() != true) {
+      _showAlertDialog('Please complete all required fields.');
+      return;
+    }
+
+    if (_contactController.text.isEmpty) {
+      _showAlertDialog('Please enter your contact number.');
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'contact': _contactController.text,
+        'address': _addressController.text,
+        'landmark': _landmarkController.text,
+        'location': _selectedLocation != null
+            ? GeoPoint(
+                _selectedLocation!.latitude, _selectedLocation!.longitude)
+            : null,
+        'area': _selectedArea?.toLowerCase(),
+      }, SetOptions(merge: true));
+    } else {
+      _showAlertDialog("User not logged in. Please log in and try again.");
+    }
+
+    Navigator.pushReplacementNamed(context, '/');
   }
-
-  Widget _buildStepByStepGuide(BuildContext context) {
-    final steps = [
-      {
-        'title': 'Step 1: Segregate Your Trash',
-        'content': '''
-Proper segregation of trash is essential for efficient recycling and disposal. Follow these guidelines to separate your waste:
-
-### Biodegradable Waste
-
-- Includes food scraps, garden waste, and other organic materials that decompose naturally.
-- Place in a separate bag or bin labeled "Biodegradable."
-
-### Non-biodegradable Waste/Recyclables
-
-- Includes plastics, metals, glass, and other materials that do not decompose.
-- Sort into categories:
-  - **Plastic**: bottles, bags, containers.
-  - **Glass**: bottles, jars (be sure to clean these before disposal).
-  - **Metal**: cans, foil, aluminum.
-  - **Paper**: newspapers, magazines, cardboard.
-- Place each type of non-biodegradable waste into separate bags or bins to simplify collection.
-
-### Hazardous Waste
-
-- Includes batteries, light bulbs, and chemicals.
-- These should be stored safely and disposed of properly through authorized disposal programs (not included in the regular collection service).
-'''
-      },
-      {
-        'title': 'Step 2: Booking a Collection Service',
-        'content': '''
-Once you’ve properly segregated your waste, you’re ready to book a collection service through the website. Here’s how it works:
-
-### Measure Your Recyclables
-
-- Use a weighing scale to measure the weight of your sorted recyclables (plastic, metal, glass, and paper). This step helps us estimate the value of your recyclables before collection.
-
-### Select Recyclables and Their Weight
-
-- On the website, choose the category of recyclables you have (e.g., plastic, metal, glass).
-- Enter the weight for each category. The website will calculate the estimated value based on current market prices.
-
-### Choose Your Location
-
-- Input your address or choose from your saved locations. This helps us determine the nearest collection team for your area.
-
-### Pick a Schedule
-
-- Select a specific date and time for the collection service from the available options. We offer flexible scheduling to fit your convenience.
-
-- Ensure your recyclables are packed and ready for pickup at the scheduled time.
-'''
-      },
-      {
-        'title': 'Step 3: Collection and Payment',
-        'content': '''
-On the scheduled date, our team will arrive at your location to collect your segregated trash.
-
-They will verify the weight and quality of the recyclables, after which the payment is directly given to you upon verification of the amount of recyclable materials you provided.
-'''
-      },
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start, // Align items to the start
-        children: [
-          const Text(
-            'STEP BY STEP GUIDE ON HOW TO BOOK A COLLECTION SERVICE',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.green,
-            ),
-          ),
-          const SizedBox(height: 16), // Add some spacing below the title
-          Column(
-            children: steps.map((step) {
-              return ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
-                title: Text(
-                  step['title']!,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: MarkdownBody(
-                      data: step['content']!,
-                      styleSheet: MarkdownStyleSheet(
-                        p: const TextStyle(fontSize: 16),
-                        h2: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                        h3: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                        listBullet: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMaterialTypesSection(BuildContext context) {
-    return Column(
-      children: [
-        const Text(
-          'MATERIAL TYPES AND DIFFERENTIATION',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.green,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _buildMaterialTabs(context),
-      ],
-    );
-  }
-
-  Widget _buildMaterialTabs(BuildContext context) {
-    return DefaultTabController(
-      length: 3, // Number of tabs: Plastic, Metal, Glass
-      child: Column(
-        children: [
-          const TabBar(
-            labelColor: Colors.green,
-            unselectedLabelColor: Colors.black,
-            indicatorColor: Colors.green,
-            tabs: [
-              Tab(text: 'Plastic'),
-              Tab(text: 'Metal'),
-              Tab(text: 'Glass'),
-            ],
-          ),
-          SizedBox(
-            height: MediaQuery.of(context).size.height * 0.5,
-            child: TabBarView(
-              children: [
-                _buildPlasticTypesGrid(context),
-                _buildMetalTypesGrid(context),
-                _buildGlassTypesGrid(context),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlasticTypesGrid(BuildContext context) {
-    final plasticTypes = [
-      {
-        'title': 'PET (Polyethylene Terephthalate)',
-        'icon': Icons.local_drink,
-        'tip': 'Used in water bottles, clear with a "1" symbol.',
-        'examples': [
-          'assets/recyclables/PET1.jpg',
-          'assets/recyclables/PET2.jpg',
-          'assets/recyclables/PET3.jpg',
-          'assets/recyclables/PET4.jpg'
-        ],
-      },
-      {
-        'title': 'HDPE (High-Density Polyethylene)',
-        'icon': Icons.shopping_bag,
-        'tip': 'Found in milk jugs, white/opaque with a "2" symbol.',
-        'examples': ['assets/images/plastic_hdpe.png'],
-      },
-      {
-        'title': 'PVC (Polyvinyl Chloride)',
-        'icon': Icons.plumbing,
-        'tip': 'Used in plumbing pipes, marked with a "3" symbol.',
-        'examples': ['assets/images/plastic_pvc.png'],
-      },
-      {
-        'title': 'LDPE (Low-Density Polyethylene)',
-        'icon': Icons.wrap_text,
-        'tip': 'Found in plastic wraps, has a "4" symbol.',
-        'examples': ['assets/images/plastic_ldpe.png'],
-      },
-      {
-        'title': 'PP (Polypropylene)',
-        'icon': Icons.kitchen,
-        'tip': 'Common in yogurt containers, marked with a "5" symbol.',
-        'examples': ['assets/images/plastic_pp.png'],
-      },
-      {
-        'title': 'PS (Polystyrene)',
-        'icon': Icons.fastfood,
-        'tip': 'Used in Styrofoam, comes with a "6" symbol.',
-        'examples': ['assets/images/plastic_ps.png'],
-      },
-    ];
-
-    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: plasticTypes.length,
-      physics: const ScrollPhysics(),
-      shrinkWrap: true,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridCount, // Responsive grid column count
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.8, // Adjusted aspect ratio
-      ),
-      itemBuilder: (context, index) {
-        final plastic = plasticTypes[index];
-        return GestureDetector(
-          onTap: () {
-            // Show details page or dialog
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MaterialDetailsPage(
-                  title: plastic['title'] as String,
-                  description: plastic['tip'] as String,
-                  examples: plastic['examples'] as List<String>,
-                ),
-              ),
-            );
-          },
-          child: Card(
-            color: Colors.green[50],
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    plastic['icon'] as IconData,
-                    size: 36,
-                    color: Colors.green,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    plastic['title'] as String,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    plastic['tip'] as String,
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMetalTypesGrid(BuildContext context) {
-    final metalTypes = [
-      {
-        'title': 'Aluminum',
-        'icon': Icons.coffee,
-        'tip': 'Used in beverage cans and foil.',
-        'examples': ['assets/images/metal_aluminum.png'],
-      },
-      {
-        'title': 'Steel',
-        'icon': Icons.build,
-        'tip': 'Found in food cans and some appliance parts.',
-        'examples': ['assets/images/metal_steel.png'],
-      },
-      // Add more metal types as needed
-    ];
-
-    // Calculate grid column count based on screen width
-    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: metalTypes.length,
-      physics: const ScrollPhysics(),
-      shrinkWrap: true, // Prevents GridView from taking infinite height
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridCount, // Responsive grid column count
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.8, // Adjusted aspect ratio
-      ),
-      itemBuilder: (context, index) {
-        final metal = metalTypes[index];
-        return GestureDetector(
-          onTap: () {
-            // Show details page or dialog
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MaterialDetailsPage(
-                  title: metal['title'] as String,
-                  description: metal['tip'] as String,
-                  examples: metal['examples'] as List<String>,
-                ),
-              ),
-            );
-          },
-          child: Card(
-            color: Colors.green[50],
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    metal['icon'] as IconData,
-                    size: 36,
-                    color: Colors.green,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    metal['title'] as String,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    metal['tip'] as String,
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildGlassTypesGrid(BuildContext context) {
-    final glassTypes = [
-      {
-        'title': 'Clear Glass',
-        'icon': Icons.local_bar,
-        'tip': 'Used in beverage bottles and jars.',
-        'examples': ['assets/images/glass_clear.png'],
-      },
-      {
-        'title': 'Colored Glass',
-        'icon': Icons.wine_bar,
-        'tip': 'Includes green and brown glass bottles.',
-        'examples': ['assets/images/glass_colored.png'],
-      },
-      // Add more glass types as needed
-    ];
-
-    // Calculate grid column count based on screen width
-    int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: glassTypes.length,
-      physics: const ScrollPhysics(),
-      shrinkWrap: true, // Prevents GridView from taking infinite height
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridCount, // Responsive grid column count
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.8, // Adjusted aspect ratio
-      ),
-      itemBuilder: (context, index) {
-        final glass = glassTypes[index];
-        return GestureDetector(
-          onTap: () {
-            // Show details page or dialog
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MaterialDetailsPage(
-                  title: glass['title'] as String,
-                  description: glass['tip'] as String,
-                  examples: glass['examples'] as List<String>,
-                ),
-              ),
-            );
-          },
-          child: Card(
-            color: Colors.green[50],
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    glass['icon'] as IconData,
-                    size: 36,
-                    color: Colors.green,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    glass['title'] as String,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    glass['tip'] as String,
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class MaterialDetailsPage extends StatelessWidget {
-  final String title;
-  final String description;
-  final List<String> examples;
-
-  const MaterialDetailsPage({
-    Key? key,
-    required this.title,
-    required this.description,
-    required this.examples,
-  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Colors.green,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text(
-              description,
-              style: const TextStyle(fontSize: 16),
+      appBar: AppBar(title: Text('Setup Contact Information')),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                bool isWideScreen = constraints.maxWidth > 700;
+
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: isWideScreen
+                      ? Row(
+                          children: [
+                            Expanded(
+                              flex: 4,
+                              child: SingleChildScrollView(
+                                child: Form(
+                                  key: _formKey,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Contact number, address, landmark, etc.
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 6,
+                              child: Container(
+                                child: GoogleMap(
+                                  onMapCreated: (controller) {
+                                    mapController = controller;
+                                    if (_selectedLocation != null) {
+                                      mapController?.animateCamera(
+                                        CameraUpdate.newLatLngZoom(
+                                            _selectedLocation!, 15),
+                                      );
+                                    }
+                                  },
+                                  initialCameraPosition: CameraPosition(
+                                    target: _selectedLocation ??
+                                        LatLng(7.0731, 125.6122),
+                                    zoom: 15,
+                                  ),
+                                  markers: _markers,
+                                  onTap: (LatLng position) async {
+                                    _addMarker(position,
+                                        '${position.latitude}, ${position.longitude}');
+                                    await _getAddressFromLatLng(position);
+                                    setState(() {
+                                      _selectedLocation = position;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : // Mobile layout
+                          Column(
+                            children: [
+                              // Contact information form and GoogleMap for mobile
+                            ],
+                          ),
+                );
+              },
             ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: examples.length,
-                itemBuilder: (context, index) {
-                  return Image.asset(
-                    examples[index],
-                    fit: BoxFit.cover,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
