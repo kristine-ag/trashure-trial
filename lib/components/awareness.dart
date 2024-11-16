@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trashure/components/appbar.dart';
+import 'package:trashure/screens/booking_screen.dart';
 
 class SustainabilityAwarenessPage extends StatefulWidget {
   @override
@@ -624,28 +625,30 @@ class _SustainabilityAwarenessPageState
   }
 
   Widget _buildBookNowButton(BuildContext context) {
-    return ElevatedButton(
-      onPressed: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Redirecting to booking page...'),
-          ),
-        );
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+  return ElevatedButton(
+    onPressed: () {
+      var mode = ''; // Assign a default or valid value
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => BookingScreen(mode: mode)),
+      );
+    },
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.white,
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(
-        'Book Now',
-        style: TextStyle(
-          fontSize: 20,
-          color: Colors.green,
-        ),
+    ),
+    child: Text(
+      'Book Now',
+      style: TextStyle(
+        fontSize: 20,
+        color: Colors.green,
       ),
-    );
-  }
+    ),
+  );
+}
+
+
 }

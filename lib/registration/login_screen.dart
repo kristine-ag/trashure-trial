@@ -2,6 +2,7 @@ import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:trashure/components/address.dart';
 
@@ -16,8 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isPasswordVisible =
-      false; // Add this variable to manage password visibility
+  bool _isPasswordVisible = false;
   String? _errorMessage;
 
   Future<void> _login() async {
@@ -84,6 +84,68 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       Navigator.pushReplacementNamed(context, '/');
     }
+  }
+
+  Future<void> _resetPassword() async {
+    final TextEditingController resetEmailController = TextEditingController();
+    String? resetError;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Reset Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: resetEmailController,
+                decoration: const InputDecoration(
+                  labelText: 'Enter your email',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              if (resetError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    resetError!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await FirebaseAuth.instance.sendPasswordResetEmail(
+                      email: resetEmailController.text.trim());
+                  Navigator.of(context).pop();
+                  Fluttertoast.showToast(
+                    msg: "Password reset email sent!",
+                    toastLength: Toast.LENGTH_SHORT,
+                    gravity: ToastGravity.BOTTOM,
+                    backgroundColor: Colors.green,
+                    textColor: Colors.white,
+                  );
+                } on FirebaseAuthException catch (e) {
+                  setState(() {
+                    resetError = e.message;
+                  });
+                }
+              },
+              child: const Text('Reset'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -233,6 +295,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   return null;
                 },
               ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () => _resetPassword(),
+                    child: const Text(
+                      "Forgot Password?",
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16.0),
               ElevatedButton(
                 onPressed: _login,
@@ -255,7 +329,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
                 child: const Text(
                   "I don't have an account",
-                  style: TextStyle(color: Colors.green),
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 18, // Adjust the font size as desired
+                  ),
                 ),
               ),
             ],

@@ -31,17 +31,41 @@ class BookingPreviewScreen extends StatefulWidget {
 class _BookingPreviewAndScheduleScreenState
     extends State<BookingPreviewScreen> {
   bool get isDonateMode => widget.mode == 'donate';
+  bool isBusinessUser = false; // New variable to track if user is a business
   String? selectedBookingId;
   String? selectedSchedule;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  Set<String> userBookedDates =
-      {}; // Stores booking IDs where the user has already booked
+  Set<String> userBookedDates = {};
 
   @override
   void initState() {
     super.initState();
     tz.initializeTimeZones();
     fetchUserBookedDates();
+    _fetchUserCategory(); // Fetch user category
+  }
+
+  // Method to fetch user category
+  Future<void> _fetchUserCategory() async {
+    final User? user = _auth.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+
+    DocumentSnapshot userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (userDoc.exists && userDoc['category'] == 'business') {
+      setState(() {
+        isBusinessUser = true;
+      });
+    }
+  }
+
+  // Method to calculate the total price without collection fee for business users
+  double calculateTotalPrice(double totalEstimatedProfit) {
+    const double collectionFee = 40.0;
+    return isBusinessUser
+        ? totalEstimatedProfit
+        : totalEstimatedProfit - collectionFee;
   }
 
   // Helper method to get the current Philippine time
@@ -50,31 +74,28 @@ class _BookingPreviewAndScheduleScreenState
     return tz.TZDateTime.now(location);
   }
 
-  // Fetch only bookings that are not within one day of the current time past 5 PM
   Future<List<DocumentSnapshot>> _getFilteredBookings() async {
     final bookingsSnapshot =
         await FirebaseFirestore.instance.collection('bookings').get();
 
-    // Get current Philippine time and set it to 5 PM
+    // Get current Philippine time
     final nowInPhilippines = getPhilippineTime();
-    final todayAt5PM = tz.TZDateTime(
+
+    // Get the start of the day two days from now in Philippine time
+    final startOfTwoDaysLater = tz.TZDateTime(
       nowInPhilippines.location,
       nowInPhilippines.year,
       nowInPhilippines.month,
-      nowInPhilippines.day,
-      17, // 5 PM
+      nowInPhilippines.day + 2, // Add 2 days to current day
     );
 
     return bookingsSnapshot.docs.where((doc) {
       final bookingDate = (doc['date'] as Timestamp).toDate();
       final bookingDateInTZ =
           tz.TZDateTime.from(bookingDate, nowInPhilippines.location);
-      final timeDifference =
-          bookingDateInTZ.difference(nowInPhilippines).inHours;
-      final isWithinOneDay = timeDifference < 24;
-      final isPast5PMToday = nowInPhilippines.isAfter(todayAt5PM);
 
-      return !(isWithinOneDay && isPast5PMToday);
+      // Only include dates that are two days or more from today
+      return bookingDateInTZ.isAfter(startOfTwoDaysLater);
     }).toList();
   }
 
@@ -121,7 +142,7 @@ class _BookingPreviewAndScheduleScreenState
       }
 
       final uid = user.uid;
-      final donated = 0;
+      final donated = isDonateMode ? 1 : 0; // Set a flag if in donate mode
 
       // Retrieve the user's document to add user data to booking
       final userDoc =
@@ -142,29 +163,38 @@ class _BookingPreviewAndScheduleScreenState
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
       // Store basic user info in the user document
-      batch.set(userRef, filteredUserData);
+      batch.set(userRef, {
+        ...filteredUserData,
+        'mode': widget.mode,
+      });
 
       double totalUserPrice = 0;
       double totalUserWeight = 0;
 
-      // Calculate totalEstimatedProfit based on selected items
-      double totalEstimatedProfit = widget.selectedItems.entries.fold(
-        0.0,
-        (previousValue, entry) {
-          double weight = entry.value['weight'] ?? 0.0;
-          double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
-          return previousValue + (weight * pricePerKg);
-        },
-      );
+      // Calculate totalEstimatedProfit based on selected items, set to 0 if in donate mode
+      double totalEstimatedProfit = isDonateMode
+          ? 0.0
+          : widget.selectedItems.entries.fold(
+              0.0,
+              (previousValue, entry) {
+                double weight = entry.value['weight'] ?? 0.0;
+                double pricePerKg =
+                    isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
+                return previousValue + (weight * pricePerKg);
+              },
+            );
 
-      // Deduct collection fee to calculate totalPrice
+      // Deduct collection fee to calculate totalPrice, unless the user is a business user
       const double collectionFee = 40.0;
-      double totalPrice = totalEstimatedProfit - collectionFee;
+      double totalPrice = isBusinessUser
+          ? totalEstimatedProfit
+          : totalEstimatedProfit - collectionFee;
 
       // Loop through each selected item and add its details to the recyclables subcollection
       for (var entry in widget.selectedItems.entries) {
         double weight = entry.value['weight'] ?? 0.0;
-        double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
+        double pricePerKg =
+            isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
         double itemPrice = weight * pricePerKg;
 
         // Format price and itemPrice to two decimal places
@@ -189,13 +219,8 @@ class _BookingPreviewAndScheduleScreenState
                   DateTime.now(),
           'category': category,
           'product_Id': documentId,
+          'original_price': entry.value['original_price'] ?? 0.0,
         };
-
-        // Add original_price only if not in donate mode
-        if (!isDonateMode) {
-          recyclableData['original_price'] =
-              entry.value['original_price'] ?? 0.0;
-        }
 
         // Add each recyclable item with the conditional fields
         batch.set(userRef.collection('recyclables').doc(), recyclableData);
@@ -203,9 +228,12 @@ class _BookingPreviewAndScheduleScreenState
 
       // Update user document with total price, weight, and calculated_total_price
       batch.update(userRef, {
-        'total_price': double.parse(totalUserPrice.toStringAsFixed(2)),
+        'total_price': isDonateMode
+            ? 0.0
+            : double.parse(totalUserPrice.toStringAsFixed(2)),
         'total_weight': double.parse(totalUserWeight.toStringAsFixed(2)),
-        'calculated_total_price': double.parse(totalPrice.toStringAsFixed(2)),
+        'calculated_total_price':
+            isDonateMode ? 0.0 : double.parse(totalPrice.toStringAsFixed(2)),
         'status': "booked",
       });
 
@@ -213,9 +241,14 @@ class _BookingPreviewAndScheduleScreenState
       await batch.commit();
 
       // Update the user's status in the main `users` collection
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'status': 'booked',
-      });
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'status': 'booked'});
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'review': 'unrated',
+      }, SetOptions(merge: true));
 
       // Calculate and update the booking document's overall price and weight
       final usersSnapshot = await bookingRef.collection('users').get();
@@ -226,7 +259,7 @@ class _BookingPreviewAndScheduleScreenState
         final userData = userDoc.data() as Map<String, dynamic>;
         overallPrice += userData['total_price'] ?? 0;
         overallWeight += userData['total_weight'] ?? 0;
-        calculatedOverallPrice += userData['calculated_total_price'];
+        calculatedOverallPrice += userData['calculated_total_price'] ?? 0;
       }
 
       await bookingRef.update({
@@ -239,7 +272,7 @@ class _BookingPreviewAndScheduleScreenState
         const SnackBar(content: Text('Booking confirmed!')),
       );
 
-      Navigator.pushReplacement(
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const BookingConfirmedScreen(
@@ -256,23 +289,21 @@ class _BookingPreviewAndScheduleScreenState
 
   @override
   Widget build(BuildContext context) {
-    print(isDonateMode);
-    double totalWeight =
-        widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      double itemWeight = (element.value['weight'] ?? 0.0);
-      return previousValue + itemWeight;
-    });
+    double totalWeight = widget.selectedItems.entries.fold(
+      0.0,
+      (previousValue, element) =>
+          previousValue + (element.value['weight'] ?? 0.0),
+    );
 
-    double totalEstimatedProfit =
-        widget.selectedItems.entries.fold(0.0, (previousValue, element) {
-      double itemPrice = (element.value['weight'] ?? 0.0) *
-          (element.value['price_per_kg'] ?? 0.0);
-      return previousValue + itemPrice;
-    });
+    double totalEstimatedProfit = widget.selectedItems.entries.fold(
+      0.0,
+      (previousValue, element) =>
+          previousValue +
+          ((element.value['weight'] ?? 0.0) *
+              (element.value['price_per_kg'] ?? 0.0)),
+    );
 
-    // Deduct collection fee
-    const double collectionFee = 40.0;
-    double totalPrice = totalEstimatedProfit - collectionFee;
+    double totalPrice = calculateTotalPrice(totalEstimatedProfit);
 
     return Scaffold(
       appBar: CustomAppBar(),
@@ -449,7 +480,7 @@ class _BookingPreviewAndScheduleScreenState
                     ),
                   ),
                   Text(
-                    '-₱${collectionFee.toStringAsFixed(2)}',
+                    '-₱${isBusinessUser ? '0.00' : collectionFee.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,

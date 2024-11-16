@@ -27,19 +27,24 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
     if (userId == null) return;
 
     try {
-      final bookingsSnapshot =
-          await FirebaseFirestore.instance.collection('bookings').get();
+      // Retrieve all bookings and manually check the user's status in each one, sorted by date descending
+      final bookingsSnapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .orderBy('date', descending: true) // Sort by date in descending order
+          .get();
+
       for (var bookingDoc in bookingsSnapshot.docs) {
         final userDocSnapshot =
             await bookingDoc.reference.collection('users').doc(userId).get();
-        if (userDocSnapshot.exists) {
-          String userStatus = userDocSnapshot['status'] ?? '';
-          if (userStatus == 'booked') {
-            Timestamp bookingDateTimestamp = bookingDoc['date'];
-            DateTime bookingDate = bookingDateTimestamp.toDate();
-            List<Map<String, dynamic>> recyclables = [];
 
-            final recyclablesSnapshot =
+        if (userDocSnapshot.exists && userDocSnapshot['status'] == 'booked') {
+          // User has an active "booked" status in this booking document
+          Timestamp bookingDateTimestamp = bookingDoc['date'];
+          DateTime bookingDate = bookingDateTimestamp.toDate();
+
+          List<Map<String, dynamic>> recyclables = [];
+
+          final recyclablesSnapshot =
               await userDocSnapshot.reference.collection('recyclables').get();
           for (var recyclableDoc in recyclablesSnapshot.docs) {
             double weight = recyclableDoc.data()['weight'] ?? 0.0;
@@ -53,25 +58,29 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
             });
           }
 
-            setState(() {
-              _currentBookingDetails = {
-                'date': bookingDate,
-                'driver': bookingDoc['driver'],
-                'vehicle': bookingDoc['vehicle'],
-                'start_time': bookingDoc['start_time'],
-                'end_time': bookingDoc['end_time'],
-                'status': bookingDoc['status'],
-                'recyclables': recyclables,
-                'total_weight': userDocSnapshot['total_weight'] ?? 0.0,
-                'total_price': userDocSnapshot['total_price'] ?? 0.0,
-                'calculated_total_price':
-                    userDocSnapshot['calculated_total_price'] ?? 0.0,
-              };
-            });
-            return;
-          }
+          setState(() {
+            _currentBookingDetails = {
+              'date': bookingDate,
+              'driver': bookingDoc['driver'],
+              'vehicle': bookingDoc['vehicle'],
+              'start_time': bookingDoc['start_time'],
+              'end_time': bookingDoc['end_time'],
+              'user_status': userDocSnapshot['status'],
+              'status': bookingDoc['status'],
+              'recyclables': recyclables,
+              'total_weight': userDocSnapshot['total_weight'] ?? 0.0,
+              'total_price': userDocSnapshot['total_price'] ?? 0.0,
+              'calculated_total_price':
+                  userDocSnapshot['calculated_total_price'] ?? 0.0,
+              'mode': userDocSnapshot['mode'] ?? 'unknown',
+            };
+          });
+          return; // Stop after finding the most recent active booking
         }
       }
+
+      // If no booking is found
+      print("No active booking found for user.");
     } catch (e) {
       print('Error fetching booking details: $e');
     }
@@ -260,9 +269,13 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
                       fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 Text(
-                  'Total Price: ₱${booking['total_price']} - 40 = ₱${booking['calculated_total_price']}',
+                  _currentBookingDetails['mode'] == 'donate'
+                      ? 'Total Price: ₱${booking['total_price']}'
+                      : 'Total Price: ₱${booking['total_price']} - 40 = ₱${booking['calculated_total_price']}',
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),

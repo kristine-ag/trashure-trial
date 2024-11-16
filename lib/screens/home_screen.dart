@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -382,44 +384,63 @@ Widget _buildMaterialTypesSection(BuildContext context) {
       final products = snapshot.data ?? [];
       final categories = products.map((product) => product['category']).toSet();
 
-      return Column(
-        children: [
-          const Text(
-            'MATERIAL TYPES AND DIFFERENTIATION',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.green,
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text(
+              'MATERIAL TYPES AND DIFFERENTIATION',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          DefaultTabController(
-            length: categories.length,
-            child: Column(
-              children: [
-                TabBar(
-                  labelColor: Colors.green,
-                  unselectedLabelColor: Colors.black,
-                  indicatorColor: Colors.green,
-                  tabs: categories.map((category) {
-                    return Tab(text: category);
-                  }).toList(),
-                ),
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.5,
-                  child: TabBarView(
-                    children: categories.map((category) {
-                      final categoryProducts = products
-                          .where((product) => product['category'] == category)
-                          .toList();
-                      return _buildProductsGrid(context, categoryProducts);
-                    }).toList(),
+            const SizedBox(height: 16),
+            const Text(
+              'Explore the different recyclable materials we accept and learn more about how to prepare them for collection or direct delivery.',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            DefaultTabController(
+              length: categories.length,
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: TabBar(
+                      labelColor: Colors.green[700],
+                      unselectedLabelColor: Colors.grey[600],
+                      indicator: BoxDecoration(
+                        color: Colors.green[200],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      tabs: categories
+                          .map((category) => Tab(text: category))
+                          .toList(),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.5,
+                    child: TabBarView(
+                      children: categories.map((category) {
+                        final categoryProducts = products
+                            .where((product) => product['category'] == category)
+                            .toList();
+                        return _buildProductsGrid(context, categoryProducts);
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     },
   );
@@ -427,420 +448,154 @@ Widget _buildMaterialTypesSection(BuildContext context) {
 
 Widget _buildProductsGrid(
     BuildContext context, List<Map<String, dynamic>> products) {
-  int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
+  int gridCount = MediaQuery.of(context).size.width > 600 ? 5 : 2;
 
   return GridView.builder(
-    padding: const EdgeInsets.all(16.0),
+    padding: const EdgeInsets.all(8.0),
     itemCount: products.length,
     physics: const ScrollPhysics(),
     shrinkWrap: true,
     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: gridCount,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 0.8,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      childAspectRatio: 0.90,
     ),
     itemBuilder: (context, index) {
       final product = products[index];
       return GestureDetector(
         onTap: () {
+          // Navigate to ProductDetailsPage with the product data
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => MaterialDetailsPage(
+              builder: (context) => ProductDetailsPage(
                 title: product['product_name'],
                 description: product['details'],
-                examples: [product['picture']],
+                picture: product['picture'],
+                unit: product['unit'],
+                category: product['category'],
               ),
             ),
           );
         },
         child: Card(
-          color: Colors.green[50],
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                product['picture'] != null
-                    ? Image.network(
-                        product['picture'],
-                        height: 60,
-                        fit: BoxFit.cover,
-                      )
-                    : const Icon(
-                        Icons.image_not_supported,
-                        size: 60,
-                        color: Colors.grey,
-                      ),
-                const SizedBox(height: 10),
-                Text(
-                  product['product_name'],
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  product['unit'],
-                  style: const TextStyle(fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0),
           ),
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildMaterialTabs(BuildContext context) {
-  return DefaultTabController(
-    length: 3, // Number of tabs: Plastic, Metal, Glass
-    child: Column(
-      children: [
-        const TabBar(
-          labelColor: Colors.green,
-          unselectedLabelColor: Colors.black,
-          indicatorColor: Colors.green,
-          tabs: [
-            Tab(text: 'Plastic'),
-            Tab(text: 'Metal'),
-            Tab(text: 'Glass'),
-          ],
-        ),
-        SizedBox(
-          height: MediaQuery.of(context).size.height * 0.5,
-          child: TabBarView(
+          elevation: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildPlasticTypesGrid(context),
-              _buildMetalTypesGrid(context),
-              _buildGlassTypesGrid(context),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(8.0)),
+                  child: product['picture'] != null
+                      ? Image.network(
+                          product['picture'],
+                          fit: BoxFit.cover,
+                        )
+                      : const Icon(
+                          Icons.image_not_supported,
+                          size: 60,
+                          color: Colors.grey,
+                        ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product['product_name'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${product['unit']}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ],
-    ),
-  );
-}
-
-Widget _buildPlasticTypesGrid(BuildContext context) {
-  final plasticTypes = [
-    {
-      'title': 'PET (Polyethylene Terephthalate)',
-      'icon': Icons.local_drink,
-      'tip': 'Used in water bottles, clear with a "1" symbol.',
-      'examples': [
-        'assets/recyclables/PET1.jpg',
-        'assets/recyclables/PET2.jpg',
-        'assets/recyclables/PET3.jpg',
-        'assets/recyclables/PET4.jpg'
-      ],
-    },
-    {
-      'title': 'HDPE (High-Density Polyethylene)',
-      'icon': Icons.shopping_bag,
-      'tip': 'Found in milk jugs, white/opaque with a "2" symbol.',
-      'examples': ['assets/images/plastic_hdpe.png'],
-    },
-    {
-      'title': 'PVC (Polyvinyl Chloride)',
-      'icon': Icons.plumbing,
-      'tip': 'Used in plumbing pipes, marked with a "3" symbol.',
-      'examples': ['assets/images/plastic_pvc.png'],
-    },
-    {
-      'title': 'LDPE (Low-Density Polyethylene)',
-      'icon': Icons.wrap_text,
-      'tip': 'Found in plastic wraps, has a "4" symbol.',
-      'examples': ['assets/images/plastic_ldpe.png'],
-    },
-    {
-      'title': 'PP (Polypropylene)',
-      'icon': Icons.kitchen,
-      'tip': 'Common in yogurt containers, marked with a "5" symbol.',
-      'examples': ['assets/images/plastic_pp.png'],
-    },
-    {
-      'title': 'PS (Polystyrene)',
-      'icon': Icons.fastfood,
-      'tip': 'Used in Styrofoam, comes with a "6" symbol.',
-      'examples': ['assets/images/plastic_ps.png'],
-    },
-  ];
-
-  int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
-  return GridView.builder(
-    padding: const EdgeInsets.all(16.0),
-    itemCount: plasticTypes.length,
-    physics: const ScrollPhysics(),
-    shrinkWrap: true,
-    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: gridCount, // Responsive grid column count
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 0.8, // Adjusted aspect ratio
-    ),
-    itemBuilder: (context, index) {
-      final plastic = plasticTypes[index];
-      return GestureDetector(
-        onTap: () {
-          // Show details page or dialog
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MaterialDetailsPage(
-                title: plastic['title'] as String,
-                description: plastic['tip'] as String,
-                examples: plastic['examples'] as List<String>,
-              ),
-            ),
-          );
-        },
-        child: Card(
-          color: Colors.green[50],
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  plastic['icon'] as IconData,
-                  size: 36,
-                  color: Colors.green,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  plastic['title'] as String,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  plastic['tip'] as String,
-                  style: const TextStyle(fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
       );
     },
   );
 }
 
-Widget _buildMetalTypesGrid(BuildContext context) {
-  final metalTypes = [
-    {
-      'title': 'Aluminum',
-      'icon': Icons.coffee,
-      'tip': 'Used in beverage cans and foil.',
-      'examples': ['assets/images/metal_aluminum.png'],
-    },
-    {
-      'title': 'Steel',
-      'icon': Icons.build,
-      'tip': 'Found in food cans and some appliance parts.',
-      'examples': ['assets/images/metal_steel.png'],
-    },
-    // Add more metal types as needed
-  ];
-
-  // Calculate grid column count based on screen width
-  int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
-  return GridView.builder(
-    padding: const EdgeInsets.all(16.0),
-    itemCount: metalTypes.length,
-    physics: const ScrollPhysics(),
-    shrinkWrap: true, // Prevents GridView from taking infinite height
-    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: gridCount, // Responsive grid column count
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 0.8, // Adjusted aspect ratio
-    ),
-    itemBuilder: (context, index) {
-      final metal = metalTypes[index];
-      return GestureDetector(
-        onTap: () {
-          // Show details page or dialog
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MaterialDetailsPage(
-                title: metal['title'] as String,
-                description: metal['tip'] as String,
-                examples: metal['examples'] as List<String>,
-              ),
-            ),
-          );
-        },
-        child: Card(
-          color: Colors.green[50],
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  metal['icon'] as IconData,
-                  size: 36,
-                  color: Colors.green,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  metal['title'] as String,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  metal['tip'] as String,
-                  style: const TextStyle(fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildGlassTypesGrid(BuildContext context) {
-  final glassTypes = [
-    {
-      'title': 'Clear Glass',
-      'icon': Icons.local_bar,
-      'tip': 'Used in beverage bottles and jars.',
-      'examples': ['assets/images/glass_clear.png'],
-    },
-    {
-      'title': 'Colored Glass',
-      'icon': Icons.wine_bar,
-      'tip': 'Includes green and brown glass bottles.',
-      'examples': ['assets/images/glass_colored.png'],
-    },
-    // Add more glass types as needed
-  ];
-
-  // Calculate grid column count based on screen width
-  int gridCount = MediaQuery.of(context).size.width > 600 ? 4 : 2;
-
-  return GridView.builder(
-    padding: const EdgeInsets.all(16.0),
-    itemCount: glassTypes.length,
-    physics: const ScrollPhysics(),
-    shrinkWrap: true, // Prevents GridView from taking infinite height
-    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: gridCount, // Responsive grid column count
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 0.8, // Adjusted aspect ratio
-    ),
-    itemBuilder: (context, index) {
-      final glass = glassTypes[index];
-      return GestureDetector(
-        onTap: () {
-          // Show details page or dialog
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MaterialDetailsPage(
-                title: glass['title'] as String,
-                description: glass['tip'] as String,
-                examples: glass['examples'] as List<String>,
-              ),
-            ),
-          );
-        },
-        child: Card(
-          color: Colors.green[50],
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  glass['icon'] as IconData,
-                  size: 36,
-                  color: Colors.green,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  glass['title'] as String,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  glass['tip'] as String,
-                  style: const TextStyle(fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-class MaterialDetailsPage extends StatelessWidget {
+class ProductDetailsPage extends StatelessWidget {
   final String title;
   final String description;
-  final List<String> examples;
+  final String picture;
+  final String unit;
+  final String category;
 
-  const MaterialDetailsPage({
-    Key? key,
+  const ProductDetailsPage({
     required this.title,
     required this.description,
-    required this.examples,
-  }) : super(key: key);
+    required this.picture,
+    required this.unit,
+    required this.category,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Determine if the screen size is larger than a certain width (desktop vs. mobile)
+    double paddingValue = MediaQuery.of(context).size.width > 600 ? 50.0 : 16.0;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Colors.green,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.green,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+            horizontal: paddingValue, vertical: 16.0), // Dynamic padding
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              width: double.infinity,
+              height: 500,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.network(picture, fit: BoxFit.cover),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Category: $category',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
               description,
-              style: const TextStyle(fontSize: 16),
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
             ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: examples.length,
-                itemBuilder: (context, index) {
-                  return Image.network(
-                    examples[index],
-                    fit: BoxFit.cover,
-                  );
-                },
-              ),
+            const SizedBox(height: 16),
+            Text(
+              'Unit: $unit',
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
             ),
           ],
         ),
@@ -848,3 +603,51 @@ class MaterialDetailsPage extends StatelessWidget {
     );
   }
 }
+
+
+
+// class MaterialDetailsPage extends StatelessWidget {
+//   final String title;
+//   final String description;
+//   final List<String> examples;
+
+//   const MaterialDetailsPage({
+//     super.key,
+//     required this.title,
+//     required this.description,
+//     required this.examples,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(
+//         title: Text(title),
+//         backgroundColor: Colors.green,
+//       ),
+//       body: Padding(
+//         padding: const EdgeInsets.all(16.0),
+//         child: Column(
+//           children: [
+//             Text(
+//               description,
+//               style: const TextStyle(fontSize: 16),
+//             ),
+//             const SizedBox(height: 20),
+//             Expanded(
+//               child: ListView.builder(
+//                 itemCount: examples.length,
+//                 itemBuilder: (context, index) {
+//                   return Image.network(
+//                     examples[index],
+//                     fit: BoxFit.cover,
+//                   );
+//                 },
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }

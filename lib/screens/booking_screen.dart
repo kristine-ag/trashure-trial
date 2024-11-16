@@ -44,6 +44,7 @@ class _BookingScreenState extends State<BookingScreen> {
       TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
   final TextEditingController _contactController = TextEditingController();
+  double minimumBookingAmount = 200.0; // Default for regular users
 
   final List<String> _areas = [
     'POBLACION',
@@ -104,6 +105,14 @@ class _BookingScreenState extends State<BookingScreen> {
               userData.get('location') ?? GeoPoint(7.0731, 125.6122);
           LatLng fetchedLatLng =
               LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
+
+          // Check the user's category and update the minimum amount if they are a business user
+          String userCategory = userData.get('category') ?? '';
+          if (userCategory == 'business') {
+            setState(() {
+              minimumBookingAmount = 500.0;
+            });
+          }
 
           setState(() {
             currentAddress = fetchedAddress;
@@ -243,8 +252,6 @@ class _BookingScreenState extends State<BookingScreen> {
     });
   }
 
-  
-
   @override
   Widget build(BuildContext context) {
     if (user == null) return _buildLoginPrompt(context);
@@ -286,7 +293,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           Text(
                             isDonateMode
                                 ? 'The minimum donation amount is ₱100 worth of recyclables'
-                                : 'Minimum booking amount: ₱200',
+                                : 'Minimum booking amount: ₱${minimumBookingAmount.toStringAsFixed(0)}',
                             style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -301,12 +308,15 @@ class _BookingScreenState extends State<BookingScreen> {
                                     ? 'Total Estimated Donation: ₱${totalProfit.toStringAsFixed(2)}'
                                     : 'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
                                 style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: totalProfit >=
-                                            (isDonateMode ? 100.0 : 200.0)
-                                        ? Colors.green[700]
-                                        : Colors.red),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: totalProfit >=
+                                          (isDonateMode
+                                              ? 100.0
+                                              : minimumBookingAmount)
+                                      ? Colors.green[700]
+                                      : Colors.red,
+                                ),
                               );
                             },
                           ),
@@ -349,8 +359,8 @@ class _BookingScreenState extends State<BookingScreen> {
                       const SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: () async {
-                          double minimumAmount = isDonateMode ? 100.0 : 200.0;
-
+                          double minimumAmount =
+                              isDonateMode ? 100.0 : minimumBookingAmount;
                           if (_totalEstimatedProfit.value < minimumAmount) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
