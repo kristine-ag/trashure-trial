@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:trashure/components/aboutus.dart';
 
 class Footer extends StatelessWidget {
   const Footer({Key? key}) : super(key: key);
 
-  Widget _buildFooterColumn(String title, List<String> items) {
+  Widget _buildFooterColumn(
+      String title, List<String> items, {List<VoidCallback?>? actions}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -15,12 +17,23 @@ class Footer extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        for (var item in items)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Text(
-              item,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
+        for (int i = 0; i < items.length; i++)
+          GestureDetector(
+            onTap: actions != null && actions.length > i ? actions[i] : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Text(
+                items[i],
+                style: TextStyle(
+                  fontSize: 14,
+                  color: actions != null && actions.length > i && actions[i] != null
+                      ? Colors.blue
+                      : Colors.black87,
+                  decoration: actions != null && actions[i] != null
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
+                ),
+              ),
             ),
           ),
       ],
@@ -31,8 +44,7 @@ class Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        bool isMobile =
-            constraints.maxWidth < 700; 
+        bool isMobile = constraints.maxWidth < 700;
 
         return Container(
           color: Colors.grey[200],
@@ -51,7 +63,18 @@ class Footer extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     _buildFooterColumn(
-                        'About Us', ['Our Story', 'Work with us']),
+                      'About Us',
+                      ['Our Story', 'Work with us'],
+                      actions: [
+                        () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AboutUsScreen(),
+                              ),
+                            ),
+                        null, // No action for 'Work with us'
+                      ],
+                    ),
                     const SizedBox(height: 20),
                     _buildFooterColumn('Contact Us', [
                       'kaagallawan@addu.edu.ph',
@@ -72,7 +95,18 @@ class Footer extends StatelessWidget {
                       ],
                     ),
                     _buildFooterColumn(
-                        'About Us', ['Our Story', 'Work with us']),
+                      'About Us',
+                      ['Our Story', 'Work with us'],
+                      actions: [
+                        () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AboutUsScreen(),
+                              ),
+                            ),
+                        null, // No action for 'Work with us'
+                      ],
+                    ),
                     _buildFooterColumn('Contact Us', [
                       'kaagallawan@addu.edu.ph',
                       'anmlim@addu.edu.ph',

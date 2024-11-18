@@ -101,6 +101,8 @@ class _BookingScreenState extends State<BookingScreen> {
         if (userData.exists) {
           String fetchedAddress = userData.get('address') ?? '';
           String fetchedContact = userData.get('contact') ?? '';
+          String fetchedLandmark = userData.get('landmark') ?? '';
+
           GeoPoint fetchedLocation =
               userData.get('location') ?? GeoPoint(7.0731, 125.6122);
           LatLng fetchedLatLng =
@@ -118,6 +120,7 @@ class _BookingScreenState extends State<BookingScreen> {
             currentAddress = fetchedAddress;
             _defaultAddressController.text = fetchedAddress;
             _contactController.text = fetchedContact;
+            _landmarkController.text = fetchedLandmark;
             currentPosition = fetchedLatLng;
             _cameraPosition = CameraPosition(target: fetchedLatLng, zoom: 15);
           });
@@ -279,48 +282,12 @@ class _BookingScreenState extends State<BookingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       _buildSectionTitle('SELECT YOUR RECYCLABLES'),
-                      const SizedBox(height: 10),
                       Container(
                         height: 4,
                         width: isMobile
                             ? MediaQuery.of(context).size.width * 0.8
                             : 400,
                         color: Colors.green[700],
-                      ),
-                      const SizedBox(height: 20),
-                      Column(
-                        children: [
-                          Text(
-                            isDonateMode
-                                ? 'The minimum donation amount is ₱100 worth of recyclables'
-                                : 'Minimum booking amount: ₱${minimumBookingAmount.toStringAsFixed(0)}',
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey[700]),
-                          ),
-                          const SizedBox(height: 5),
-                          ValueListenableBuilder<double>(
-                            valueListenable: _totalEstimatedProfit,
-                            builder: (context, totalProfit, child) {
-                              return Text(
-                                isDonateMode
-                                    ? 'Total Estimated Donation: ₱${totalProfit.toStringAsFixed(2)}'
-                                    : 'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: totalProfit >=
-                                          (isDonateMode
-                                              ? 100.0
-                                              : minimumBookingAmount)
-                                      ? Colors.green[700]
-                                      : Colors.red,
-                                ),
-                              );
-                            },
-                          ),
-                        ],
                       ),
                       SizedBox(height: 20),
                       Container(
@@ -335,7 +302,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         ),
                       ),
                       Container(
-                        height: isMobile ? 300 : 600,
+                        height: isMobile ? 300 : 450,
                         child: TabBarView(
                           children: categories.map((categoryDoc) {
                             final categoryName = categoryDoc['category_name'];
@@ -344,9 +311,43 @@ class _BookingScreenState extends State<BookingScreen> {
                           }).toList(),
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      Column(
+                        children: [
+                          Text(
+                            isDonateMode
+                                ? 'The minimum donation amount is ₱100 worth of recyclables'
+                                : 'Minimum booking amount: ₱${minimumBookingAmount.toStringAsFixed(0)}',
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[700]),
+                          ),
+                          const SizedBox(height: 5),
+                          ValueListenableBuilder<double>(
+                            valueListenable: _totalEstimatedProfit,
+                            builder: (context, totalProfit, child) {
+                              return Text(
+                                isDonateMode
+                                    ? 'Total Estimated Donation: ₱${totalProfit.toStringAsFixed(2)}'
+                                    : 'Total Estimated Profit: ₱${totalProfit.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: totalProfit >=
+                                          (isDonateMode
+                                              ? 100.0
+                                              : minimumBookingAmount)
+                                      ? Colors.green[700]
+                                      : Colors.red,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 50),
                       _buildSectionTitle('VERIFY YOUR ADDRESS'),
-                      const SizedBox(height: 10),
                       Container(
                         height: 4,
                         width: isMobile
@@ -357,114 +358,145 @@ class _BookingScreenState extends State<BookingScreen> {
                       const SizedBox(height: 20),
                       _buildAddressSection(context, isMobile),
                       const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: () async {
-                          double minimumAmount =
-                              isDonateMode ? 100.0 : minimumBookingAmount;
-                          if (_totalEstimatedProfit.value < minimumAmount) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Please add more recyclables to reach the minimum amount of ₱${minimumAmount.toStringAsFixed(0)}.'),
-                              ),
-                            );
-                            return;
-                          }
-
-                          if (_selectedArea == null || _selectedArea!.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Please select a district to proceed.')),
-                            );
-                            return;
-                          }
-
-                          Map<String, dynamic> selectedItems = {};
-                          _productQuantities.forEach((productName, notifier) {
-                            if (notifier.value > 0) {
-                              final productPrice = _productPrices[productName];
-                              final priceTimestamp =
-                                  _productTimestamps[productName];
-                              final productDescription =
-                                  _productDescriptions[productName];
-                              final productImage = _productImages[productName];
-                              final productCategory =
-                                  _productCategories[productName];
-                              final productId = _productIds[productName];
-                              final originalPrice =
-                                  _originalPrices[productName];
-
-                              selectedItems[productName] = {
-                                'weight': notifier.value,
-                                'price_per_kg': productPrice,
-                                'original_price': originalPrice,
-                                'total_price': notifier.value * productPrice!,
-                                'price_timestamp': priceTimestamp,
-                                'description': productDescription,
-                                'image': productImage,
-                                'category': productCategory,
-                                'product_Id': productId,
-                                'district': _selectedArea,
-                              };
-                            }
-                          });
-
-                          if (selectedItems.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content:
-                                      Text('Please select at least one item.')),
-                            );
-                            return;
-                          }
-
-                          final address = _defaultAddressController.text;
-                          final landmark = _landmarkController.text;
-                          final contact = _contactController.text;
-                          final fullAddress = '$address, Landmark: $landmark';
-
-                          if (user != null) {
-                            try {
-                              await FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(user!.uid)
-                                  .update({
-                                'address': address,
-                                'landmark': landmark,
-                                'contact': contact,
-                                'location': GeoPoint(
-                                    currentPosition?.latitude ?? 0.0,
-                                    currentPosition?.longitude ?? 0.0),
-                                'area': _selectedArea?.toLowerCase(),
-                              });
-                            } catch (e) {
-                              print('Error updating Firestore: $e');
-                            }
-                          }
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BookingPreviewScreen(
-                                  selectedItems: selectedItems,
-                                  address: fullAddress,
-                                  contact: contact,
-                                  district: _selectedArea!,
-                                  mode: isDonateMode ? 'donate' : 'sell'),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(
+                                  context); // Navigate back to the previous screen
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors
+                                  .grey, // Set the background color for Back button
+                              padding: isMobile
+                                  ? const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 12)
+                                  : const EdgeInsets.symmetric(
+                                      horizontal: 32, vertical: 16),
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          padding: isMobile
-                              ? const EdgeInsets.symmetric(
-                                  horizontal: 24, vertical: 12)
-                              : const EdgeInsets.symmetric(
-                                  horizontal: 32, vertical: 16),
-                        ),
-                        child: const Text('Next',
-                            style: TextStyle(color: Colors.white)),
+                            child: const Text('Back',
+                                style: TextStyle(color: Colors.white)),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              double minimumAmount =
+                                  isDonateMode ? 100.0 : minimumBookingAmount;
+                              if (_totalEstimatedProfit.value < minimumAmount) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Please add more recyclables to reach the minimum amount of ₱${minimumAmount.toStringAsFixed(0)}.'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              if (_selectedArea == null ||
+                                  _selectedArea!.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Please select a district to proceed.')),
+                                );
+                                return;
+                              }
+
+                              Map<String, dynamic> selectedItems = {};
+                              _productQuantities
+                                  .forEach((productName, notifier) {
+                                if (notifier.value > 0) {
+                                  final productPrice =
+                                      _productPrices[productName];
+                                  final priceTimestamp =
+                                      _productTimestamps[productName];
+                                  final productDescription =
+                                      _productDescriptions[productName];
+                                  final productImage =
+                                      _productImages[productName];
+                                  final productCategory =
+                                      _productCategories[productName];
+                                  final productId = _productIds[productName];
+                                  final originalPrice =
+                                      _originalPrices[productName];
+
+                                  selectedItems[productName] = {
+                                    'weight': notifier.value,
+                                    'price_per_kg': productPrice,
+                                    'original_price': originalPrice,
+                                    'total_price':
+                                        notifier.value * productPrice!,
+                                    'price_timestamp': priceTimestamp,
+                                    'description': productDescription,
+                                    'image': productImage,
+                                    'category': productCategory,
+                                    'product_Id': productId,
+                                    'district': _selectedArea,
+                                  };
+                                }
+                              });
+
+                              if (selectedItems.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Please select at least one item.')),
+                                );
+                                return;
+                              }
+
+                              final address = _defaultAddressController.text;
+                              final landmark = _landmarkController.text;
+                              final contact = _contactController.text;
+                              final fullAddress =
+                                  '$address, Landmark: $landmark';
+
+                              if (user != null) {
+                                try {
+                                  await FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(user!.uid)
+                                      .update({
+                                    'address': address,
+                                    'landmark': landmark,
+                                    'contact': contact,
+                                    'location': GeoPoint(
+                                        currentPosition?.latitude ?? 0.0,
+                                        currentPosition?.longitude ?? 0.0),
+                                    'area': _selectedArea?.toLowerCase(),
+                                  });
+                                } catch (e) {
+                                  print('Error updating Firestore: $e');
+                                }
+                              }
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => BookingPreviewScreen(
+                                    selectedItems: selectedItems,
+                                    address: fullAddress,
+                                    contact: contact,
+                                    landmark: landmark,
+                                    district: _selectedArea!,
+                                    mode: isDonateMode ? 'donate' : 'sell',
+                                  ),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[
+                                  700], // Set the background color for Next button
+                              padding: isMobile
+                                  ? const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 12)
+                                  : const EdgeInsets.symmetric(
+                                      horizontal: 32, vertical: 16),
+                            ),
+                            child: const Text('Next',
+                                style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 20),
                       const Footer(),
@@ -728,14 +760,22 @@ class _BookingScreenState extends State<BookingScreen> {
                                     contentPadding: EdgeInsets.zero,
                                   ),
                                   onChanged: (value) {
-                                    double? newWeight = double.tryParse(value);
-                                    if (newWeight != null) {
-                                      newWeight = double.parse(
-                                          newWeight.toStringAsFixed(2));
-                                      _productQuantities[title]!.value =
-                                          newWeight;
-                                      _updateTotalEstimatedProfit();
+                                    double newWeight =
+                                        0.0; // Default to 0 if input is empty or invalid
+                                    if (value.isNotEmpty) {
+                                      newWeight = double.tryParse(value) ?? 0.0;
                                     }
+
+                                    // Ensure the value has at most 2 decimal places
+                                    newWeight = double.parse(
+                                        newWeight.toStringAsFixed(2));
+
+                                    // Update the ValueNotifier with the new weight
+                                    _productQuantities[title]!.value =
+                                        newWeight;
+
+                                    // Update the total estimated profit
+                                    _updateTotalEstimatedProfit();
                                   },
                                 ),
                               ),
@@ -927,16 +967,24 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(1, 16, 1, 1),
-      child: Center(
-        child: Text(
-          title,
-          style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.green[700],
-              letterSpacing: 1.5),
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.green[700],
+                letterSpacing: 1.5,
+              ),
+              textAlign: TextAlign
+                  .center, // Ensures text is centered within its container
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -42,32 +42,33 @@ class _ContactSetupScreenState extends State<ContactSetupScreen> {
   ];
   final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
 
-  @override
-  void initState() {
-    super.initState();
-    _requestLocationPermission();
-  }
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   _requestLocationPermission();
+  // }
 
-  Future<void> _requestLocationPermission() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+  // Future<void> _requestLocationPermission() async {
+  //   LocationPermission permission = await Geolocator.checkPermission();
+  //   if (permission == LocationPermission.denied) {
+  //     permission = await Geolocator.requestPermission();
+  //   }
 
-    if (permission == LocationPermission.whileInUse ||
-        permission == LocationPermission.always) {
-      Position position = await Geolocator.getCurrentPosition();
-      final userLocation = LatLng(position.latitude, position.longitude);
-      _addMarker(userLocation, "Your Location");
-      mapController?.animateCamera(CameraUpdate.newLatLng(userLocation));
-      await _getAddressFromLatLng(userLocation);
-      setState(() {
-        _selectedLocation = userLocation;
-      });
-    } else {
-      _showAlertDialog("Location permission is required to proceed.");
-    }
-  }
+  //   if (permission == LocationPermission.whileInUse ||
+  //       permission == LocationPermission.always) {
+  //     Position position = await Geolocator.getCurrentPosition();
+  //     final userLocation = LatLng(position.latitude, position.longitude);
+  //     _addMarker(userLocation, "Your Location");
+  //     mapController?.animateCamera(CameraUpdate.newLatLng(userLocation));
+  //     await _getAddressFromLatLng(userLocation);
+  //     setState(() {
+  //       _selectedLocation = userLocation;
+  //     });
+  //   } 
+  //   else {
+  //     _showAlertDialog("Location permission is required to proceed.");
+  //   }
+  // }
 
   @override
   void dispose() {

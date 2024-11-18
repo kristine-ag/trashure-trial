@@ -162,6 +162,104 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _editPersonalInformation() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      _showAlertDialog('No user is currently logged in.');
+      return;
+    }
+
+    final TextEditingController nameController = TextEditingController();
+    final TextEditingController phoneController = TextEditingController();
+
+    // Fetch current user's details from Firestore
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists) {
+        nameController.text =
+            '${userDoc['firstName'] ?? ''} ${userDoc['lastName'] ?? ''}';
+        phoneController.text = userDoc['contact'] ?? '';
+      }
+    } catch (e) {
+      _showAlertDialog('Error fetching user data: $e');
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        // Use a specific context for the dialog
+        return AlertDialog(
+          title: const Text('Edit Personal Information'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name',
+                  prefixIcon: Icon(Icons.person),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: phoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Phone Number',
+                  prefixIcon: Icon(Icons.phone),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(), // Use dialogContext to pop
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newName = nameController.text.trim();
+                final newPhone = phoneController.text.trim();
+
+                // Update Firestore with the name and phone
+                try {
+                  final names = newName.split(' ');
+                  final firstName = names.isNotEmpty ? names.first : '';
+                  final lastName = names.length > 1 ? names.last : '';
+
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .update({
+                    'firstName': firstName,
+                    'lastName': lastName,
+                    'contact': newPhone,
+                  });
+
+                  // Show a confirmation message after dismissing the dialog
+                  Navigator.of(dialogContext).pop(); // Close the dialog first
+                  _showAlertDialog('Information updated successfully!');
+                } catch (e) {
+                  // Show an error message after dismissing the dialog
+                  Navigator.of(dialogContext).pop(); // Close the dialog first
+                  _showAlertDialog('Error updating information: $e');
+                }
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _pickAndUploadImage() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -293,10 +391,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 40),
               _buildSecuritySection(),
               const SizedBox(height: 40),
-              _buildSupportAndFeedback(),
-              const SizedBox(height: 40),
               Divider(color: Colors.grey[400], thickness: 1, height: 1),
               _buildLogoutButton(),
+              const SizedBox(height: 20),
             ],
           );
         },
@@ -370,15 +467,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 10),
             ListTile(
+              leading: const Icon(Icons.email),
+              title: const Text('Email Address'),
+              subtitle: Text(_auth.currentUser!.email ?? 'No email available'),
+            ),
+            ListTile(
               leading: const Icon(Icons.person),
               title: const Text('Full Name'),
               subtitle:
                   Text(fullName.isNotEmpty ? fullName : 'No name available'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.email),
-              title: const Text('Email Address'),
-              subtitle: Text(_auth.currentUser!.email ?? 'No email available'),
             ),
             ListTile(
               leading: const Icon(Icons.phone),
@@ -390,11 +487,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Address'),
               subtitle: Text(_address ?? 'No address available'),
             ),
-            ElevatedButton.icon(
-              onPressed: _pickLocationOnMap,
-              icon: const Icon(Icons.map),
-              label: const Text('Edit Address'),
-            ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // Check if the screen width is less than a certain threshold (e.g., 600px for mobile)
+                bool isMobile = constraints.maxWidth < 600;
+
+                return isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _editPersonalInformation,
+                            icon: const Icon(Icons.edit),
+                            label: const Text('Edit Name and Number'),
+                          ),
+                          const SizedBox(height: 10),
+                          ElevatedButton.icon(
+                            onPressed: _pickLocationOnMap,
+                            icon: const Icon(Icons.map),
+                            label: const Text('Edit Address'),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _editPersonalInformation,
+                            icon: const Icon(Icons.edit),
+                            label: const Text('Edit Name and Number'),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton.icon(
+                            onPressed: _pickLocationOnMap,
+                            icon: const Icon(Icons.map),
+                            label: const Text('Edit Address'),
+                          ),
+                        ],
+                      );
+              },
+            )
           ],
         ),
       ),
@@ -499,40 +631,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
               },
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSupportAndFeedback() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Support & Feedback',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-              ),
-            ),
             const SizedBox(height: 10),
-            ListTile(
-              leading: const Icon(Icons.feedback),
-              title: const Text('Feedback'),
-              subtitle: const Text('Tap to provide feedback'),
-              onTap: () {
-                // Add feedback logic here
-              },
-            ),
             ListTile(
               leading: const Icon(Icons.description),
               title: const Text('Terms & Conditions / Privacy Policy'),

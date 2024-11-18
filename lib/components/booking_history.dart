@@ -14,22 +14,59 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   String _filterType = 'None';
   String? _selectedDriver;
   DateTime? _selectedDate;
+  List<Map<String, dynamic>> _allBookings = [];
+  List<Map<String, dynamic>> _filteredBookings = [];
+  List<String> _driverList = [];
 
-  Stream<List<Map<String, dynamic>>> _bookingHistoryStream() async* {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) {
-      yield [];
-      return;
-    }
+  @override
+  void initState() {
+    super.initState();
+    _fetchBookingHistory();
+    _fetchDriverList();
+  }
 
-    await for (var bookingsSnapshot
-        in FirebaseFirestore.instance.collection('bookings').snapshots()) {
-      List<Map<String, dynamic>> bookingHistory = [];
+  // Fetch list of drivers from Firestore
+  Future<void> _fetchDriverList() async {
+    try {
+      final driversSnapshot = await FirebaseFirestore.instance
+          .collection('employees')
+          .where('position', whereIn: ['driver', 'contractual driver']).get();
 
-      if (bookingsSnapshot.docs.isEmpty) {
-        yield [];
-        continue;
+      if (driversSnapshot.docs.isEmpty) {
+        print('No drivers found in the employee collection.');
       }
+
+      List<String> drivers = driversSnapshot.docs
+          .map((doc) {
+            if (doc.data().containsKey('name')) {
+              return doc['name'] as String;
+            } else {
+              print('Document ${doc.id} is missing the "name" field.');
+              return null;
+            }
+          })
+          .whereType<String>()
+          .toList();
+
+      setState(() {
+        _driverList = drivers;
+      });
+
+      print('Driver list fetched successfully: $_driverList');
+    } catch (e) {
+      print('Error fetching driver list: $e');
+    }
+  }
+
+  Future<void> _fetchBookingHistory() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      final bookingsSnapshot =
+          await FirebaseFirestore.instance.collection('bookings').get();
+
+      List<Map<String, dynamic>> bookingHistory = [];
 
       for (var bookingDoc in bookingsSnapshot.docs) {
         String bookingId = bookingDoc.id;
@@ -42,17 +79,13 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
             .doc(userId)
             .get();
 
-        if (!userDocSnapshot.exists) {
-          continue;
-        }
+        if (!userDocSnapshot.exists) continue;
 
         final userData = userDocSnapshot.data();
         if (userData == null ||
             !userData.containsKey('address') ||
             !userData.containsKey('contact') ||
-            !userData.containsKey('status')) {
-          continue;
-        }
+            !userData.containsKey('status')) continue;
 
         final recyclablesSnapshot = await FirebaseFirestore.instance
             .collection('bookings')
@@ -90,13 +123,44 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
         });
       }
 
+      // Sort by most recent date
       bookingHistory.sort((a, b) => b['date'].compareTo(a['date']));
-      yield bookingHistory;
+
+      setState(() {
+        _allBookings = bookingHistory;
+        _filteredBookings = bookingHistory;
+      });
+    } catch (e) {
+      print('Error fetching booking history: $e');
     }
   }
 
-  Widget _buildBookingTable(
-      List<Map<String, dynamic>> bookings, bool isDesktop) {
+  void _applyFilters() {
+    List<Map<String, dynamic>> filtered = [..._allBookings];
+
+    if (_filterType == 'Date' && _selectedDate != null) {
+      filtered = filtered.where((booking) {
+        final bookingDate = (booking['date'] as Timestamp).toDate();
+        return bookingDate.year == _selectedDate!.year &&
+            bookingDate.month == _selectedDate!.month &&
+            bookingDate.day == _selectedDate!.day;
+      }).toList();
+    }
+
+    if (_filterType == 'Driver' &&
+        _selectedDriver != null &&
+        _selectedDriver != 'All') {
+      filtered = filtered
+          .where((booking) => booking['driver'] == _selectedDriver)
+          .toList();
+    }
+
+    setState(() {
+      _filteredBookings = filtered;
+    });
+  }
+
+  Widget _buildBookingTable(List<Map<String, dynamic>> bookings) {
     return Column(
       children: bookings.map((booking) {
         return Card(
@@ -108,48 +172,28 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
             backgroundColor: Colors.grey[100],
             title: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10.0),
-              child: isDesktop
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(DateFormat('MM/dd/yyyy')
-                            .format((booking['date'] as Timestamp).toDate())),
-                        Text(booking['bookingId'] ?? 'N/A'),
-                        Text(booking['driver']),
-                        Text(booking['vehicle']),
-                        Text(
-                          booking['status'],
-                          style: TextStyle(
-                            color: booking['status'] == 'collected'
-                                ? Colors.green
-                                : Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Date: ${DateFormat('MM/dd/yyyy').format((booking['date'] as Timestamp).toDate())}',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('Booking ID: ${booking['bookingId'] ?? 'N/A'}'),
-                        Text('Driver: ${booking['driver']}'),
-                        Text('Vehicle: ${booking['vehicle']}'),
-                        Text(
-                          'Status: ${booking['status']}',
-                          style: TextStyle(
-                            color: booking['status'] == 'collected'
-                                ? Colors.green
-                                : Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Date: ${DateFormat('MM/dd/yyyy').format((booking['date'] as Timestamp).toDate())}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Booking ID: ${booking['bookingId'] ?? 'N/A'}'),
+                  Text('Driver: ${booking['driver']}'),
+                  Text('Vehicle: ${booking['vehicle']}'),
+                  Text(
+                    'Status: ${booking['status']}',
+                    style: TextStyle(
+                      color: booking['status'] == 'collected'
+                          ? Colors.green
+                          : Colors.orange,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                ],
+              ),
             ),
             children: [
               const Divider(),
@@ -164,92 +208,22 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                           TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const SizedBox(height: 8),
-                    Table(
-                      columnWidths: const {
-                        0: FlexColumnWidth(3),
-                        1: FlexColumnWidth(2),
-                        2: FlexColumnWidth(2),
-                        3: FlexColumnWidth(2),
-                      },
-                      border: TableBorder.all(color: Colors.grey, width: 0.5),
-                      children: [
-                        TableRow(
-                          decoration: BoxDecoration(color: Colors.grey[300]),
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Type',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Weight',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Price per kg',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text('Total',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                          ],
+                    ...booking['recyclables'].map<Widget>((recyclable) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Text(
+                          '${recyclable['type'] ?? 'Unknown'}: ${recyclable['weight'] ?? 0} kg at ₱${recyclable['price'] ?? 0}',
                         ),
-                        ...booking['recyclables'].map<TableRow>((recyclable) {
-                          return TableRow(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(recyclable['type'] ?? 'Unknown'),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  booking['status'] == 'collected'
-                                      ? '${recyclable['weight'] ?? 0} kg  / collected: ${recyclable['final_weight'] ?? 0} kg'
-                                      : '${recyclable['weight'] ?? 0} kg',
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  booking['status'] == 'collected'
-                                      ? '₱${recyclable['price'] ?? 0}  / paid: ₱${recyclable['final_item_price'] ?? 0}'
-                                      : '₱${recyclable['price'] ?? 0}',
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  booking['status'] == 'collected'
-                                      ? '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}  / paid: ₱${((recyclable['final_item_price'] ?? 0)).toStringAsFixed(2)}'
-                                      : '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}',
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ],
-                    ),
+                      );
+                    }).toList(),
                     const SizedBox(height: 12),
                     Text(
-                      booking['status'] == 'collected'
-                          ? 'Total Weight Collected: ${booking['final_total_weight']} kg'
-                          : 'Total Weight: ${booking['final_weight']} kg',
+                      'Total Weight: ${booking['final_weight']} kg',
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     Text(
-                      booking['status'] == 'collected'
-                          ? 'Total Price Received: ₱${booking['final_total_price']}'
-                          : 'Total Price: ₱${booking['final_item_price']}',
+                      'Total Price: ₱${booking['final_item_price']}',
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 14),
                     ),
@@ -263,47 +237,76 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     );
   }
 
+  Widget _buildFilterWidget() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start, // Align items to the start
+        children: [
+          // Date filter button
+          ElevatedButton(
+            onPressed: () async {
+              final pickedDate = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now(),
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _filterType = 'Date';
+                  _selectedDate = pickedDate;
+                  _applyFilters();
+                });
+              }
+            },
+            child: const Text('Filter by Date'),
+          ),
+          const SizedBox(width: 10), // Spacing between filters
+          // Driver dropdown
+          DropdownButton<String>(
+            value: _selectedDriver,
+            hint: const Text('Filter by Driver'),
+            onChanged: (value) {
+              setState(() {
+                _filterType = 'Driver';
+                _selectedDriver = value!;
+                _applyFilters();
+              });
+            },
+            items: [
+              const DropdownMenuItem(
+                value: 'All',
+                child: Text('Filter by Driver'),
+              ),
+              ..._driverList.map((driver) => DropdownMenuItem(
+                    value: driver,
+                    child: Text(driver),
+                  )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        iconTheme: IconThemeData(color: Colors.white),
-        title: const Text(
-          'Booking History',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('Booking History'),
         backgroundColor: Colors.teal,
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          bool isDesktop = constraints.maxWidth > 700;
-          return StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _bookingHistoryStream(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return const Center(
-                    child: Text('Error fetching booking history.'));
-              }
-
-              if (snapshot.hasData) {
-                final bookingHistory = snapshot.data!;
-                if (bookingHistory.isEmpty) {
-                  return const Center(child: Text('No bookings found.'));
-                }
-
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(8.0),
-                  child: _buildBookingTable(bookingHistory, isDesktop),
-                );
-              } else {
-                return const Center(child: Text('No bookings found.'));
-              }
-            },
-          );
-        },
+      body: Column(
+        children: [
+          _buildFilterWidget(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(8.0),
+              child: _buildBookingTable(_filteredBookings),
+            ),
+          ),
+        ],
       ),
     );
   }

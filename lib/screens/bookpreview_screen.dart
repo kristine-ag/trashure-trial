@@ -12,16 +12,18 @@ class BookingPreviewScreen extends StatefulWidget {
   final Map<String, dynamic> selectedItems;
   final String address;
   final String contact;
+  final String landmark;
   final String district;
 
-  const BookingPreviewScreen({
-    Key? key,
-    required this.mode,
-    required this.selectedItems,
-    required this.address,
-    required this.contact,
-    required this.district,
-  }) : super(key: key);
+  const BookingPreviewScreen(
+      {Key? key,
+      required this.mode,
+      required this.selectedItems,
+      required this.address,
+      required this.contact,
+      required this.district,
+      required this.landmark})
+      : super(key: key);
 
   @override
   _BookingPreviewAndScheduleScreenState createState() =>
@@ -86,7 +88,7 @@ class _BookingPreviewAndScheduleScreenState
       nowInPhilippines.location,
       nowInPhilippines.year,
       nowInPhilippines.month,
-      nowInPhilippines.day + 2, // Add 2 days to current day
+      nowInPhilippines.day + 1, 
     );
 
     return bookingsSnapshot.docs.where((doc) {
@@ -142,9 +144,8 @@ class _BookingPreviewAndScheduleScreenState
       }
 
       final uid = user.uid;
-      final donated = isDonateMode ? 1 : 0; // Set a flag if in donate mode
+      final donated = isDonateMode ? 1 : 0;
 
-      // Retrieve the user's document to add user data to booking
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (!userDoc.exists) {
@@ -160,6 +161,13 @@ class _BookingPreviewAndScheduleScreenState
           FirebaseFirestore.instance.collection('bookings').doc(bookingId);
       final userRef = bookingRef.collection('users').doc(uid);
 
+      // Fetch the current overall price from the booking document
+      final bookingDoc = await bookingRef.get();
+      double currentOverallPrice = 0.0;
+      if (bookingDoc.exists && bookingDoc.data() != null) {
+        currentOverallPrice = bookingDoc.data()?['overall_price'] ?? 0.0;
+      }
+
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
       // Store basic user info in the user document
@@ -172,17 +180,15 @@ class _BookingPreviewAndScheduleScreenState
       double totalUserWeight = 0;
 
       // Calculate totalEstimatedProfit based on selected items, set to 0 if in donate mode
-      double totalEstimatedProfit = isDonateMode
-          ? 0.0
-          : widget.selectedItems.entries.fold(
-              0.0,
-              (previousValue, entry) {
-                double weight = entry.value['weight'] ?? 0.0;
-                double pricePerKg =
-                    isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
-                return previousValue + (weight * pricePerKg);
-              },
-            );
+      double totalEstimatedProfit = widget.selectedItems.entries.fold(
+        0.0,
+        (previousValue, entry) {
+          double weight = entry.value['weight'] ?? 0.0;
+          double pricePerKg =
+              isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
+          return previousValue + (weight * pricePerKg);
+        },
+      );
 
       // Deduct collection fee to calculate totalPrice, unless the user is a business user
       const double collectionFee = 40.0;
@@ -193,8 +199,7 @@ class _BookingPreviewAndScheduleScreenState
       // Loop through each selected item and add its details to the recyclables subcollection
       for (var entry in widget.selectedItems.entries) {
         double weight = entry.value['weight'] ?? 0.0;
-        double pricePerKg =
-            isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
+        double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
         double itemPrice = weight * pricePerKg;
 
         // Format price and itemPrice to two decimal places
@@ -212,14 +217,15 @@ class _BookingPreviewAndScheduleScreenState
         Map<String, dynamic> recyclableData = {
           'type': entry.key,
           'weight': weight,
-          'price': pricePerKg,
-          'item_price': itemPrice,
+          'price': isDonateMode ? 0.0 : pricePerKg,
+          'item_price': isDonateMode ? 0.0 : itemPrice,
           'timestamp':
               (entry.value['price_timestamp'] as Timestamp?)?.toDate() ??
                   DateTime.now(),
           'category': category,
           'product_Id': documentId,
-          'original_price': entry.value['original_price'] ?? 0.0,
+          'original_price':
+              isDonateMode ? 0.0 : (entry.value['original_price'] ?? 0.0),
         };
 
         // Add each recyclable item with the conditional fields
@@ -229,13 +235,17 @@ class _BookingPreviewAndScheduleScreenState
       // Update user document with total price, weight, and calculated_total_price
       batch.update(userRef, {
         'total_price': isDonateMode
-            ? 0.0
+            ? double.parse(totalUserPrice.toStringAsFixed(2))
             : double.parse(totalUserPrice.toStringAsFixed(2)),
         'total_weight': double.parse(totalUserWeight.toStringAsFixed(2)),
         'calculated_total_price':
             isDonateMode ? 0.0 : double.parse(totalPrice.toStringAsFixed(2)),
         'status': "booked",
       });
+
+      // Calculate new overall price
+      double newOverallPrice = currentOverallPrice +
+          (isDonateMode ? 0.0 : double.parse(totalPrice.toStringAsFixed(2)));
 
       // Commit all the changes
       await batch.commit();
@@ -252,18 +262,18 @@ class _BookingPreviewAndScheduleScreenState
 
       // Calculate and update the booking document's overall price and weight
       final usersSnapshot = await bookingRef.collection('users').get();
-      double overallPrice = 0;
+      // double overallPrice = 0;
       double overallWeight = 0;
       double calculatedOverallPrice = 0;
       for (var userDoc in usersSnapshot.docs) {
         final userData = userDoc.data() as Map<String, dynamic>;
-        overallPrice += userData['total_price'] ?? 0;
+        // overallPrice += userData['total_price'] ?? 0;
         overallWeight += userData['total_weight'] ?? 0;
         calculatedOverallPrice += userData['calculated_total_price'] ?? 0;
       }
 
       await bookingRef.update({
-        'overall_price': overallPrice,
+        'overall_price': double.parse(newOverallPrice.toStringAsFixed(2)),
         'overall_weight': overallWeight,
         'calculated_overall_price': calculatedOverallPrice,
       });
@@ -589,6 +599,23 @@ class _BookingPreviewAndScheduleScreenState
               ),
             ),
             Text(
+              widget.landmark,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'District',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
+            Text(
               widget.district, // Display district here
               style: const TextStyle(
                 fontSize: 16,
@@ -636,7 +663,6 @@ class _BookingPreviewAndScheduleScreenState
           return const Center(child: Text('No bookings available.'));
         }
 
-        // Filter documents by district and status
         final bookings = snapshot.data!.where((doc) {
           final bookingData = doc.data() as Map<String, dynamic>;
           return bookingData['location'] == widget.district &&
@@ -681,7 +707,11 @@ class _BookingPreviewAndScheduleScreenState
                     final String? startTime = bookingData['start_time'];
                     final String? endTime = bookingData['end_time'];
 
-                    bool isAlreadyBooked = userBookedDates.contains(bookingId);
+                    final int bookedUsersCount =
+                        (bookingData['booked_users'] ?? 0) as int;
+
+                    final bool isAlreadyBooked =
+                        userBookedDates.contains(bookingId);
 
                     return _buildBookingCard(
                       context,
@@ -691,6 +721,7 @@ class _BookingPreviewAndScheduleScreenState
                       isAlreadyBooked,
                       startTime,
                       endTime,
+                      bookedUsersCount,
                     );
                   }).toList(),
                 ),
@@ -710,16 +741,21 @@ class _BookingPreviewAndScheduleScreenState
     bool isAlreadyBooked,
     String? startTime,
     String? endTime,
+    int bookedUsersCount, // Number of users already booked for this schedule
   ) {
     final isSelected = selectedBookingId == bookingId;
+    final isFullyBooked = bookedUsersCount >= 10; // Limit to 10 users
 
     return GestureDetector(
-      onTap: isAlreadyBooked
+      onTap: (isAlreadyBooked || isFullyBooked)
           ? () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                SnackBar(
                   content: Text(
-                      'You already have a scheduled booking for this day.'),
+                    isFullyBooked
+                        ? 'This schedule is fully booked.'
+                        : 'You already have a scheduled booking for this day.',
+                  ),
                 ),
               );
             }
@@ -738,7 +774,9 @@ class _BookingPreviewAndScheduleScreenState
           ),
           color: isAlreadyBooked
               ? Colors.grey[300]
-              : (isSelected ? const Color(0xFF8DD3BB) : Colors.white),
+              : (isFullyBooked
+                  ? Colors.red[100]
+                  : (isSelected ? const Color(0xFF8DD3BB) : Colors.white)),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Row(
@@ -783,22 +821,35 @@ class _BookingPreviewAndScheduleScreenState
                         ),
                       ),
                     ],
+                    if (isFullyBooked) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        'Fully Booked',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.red[700],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                isAlreadyBooked
-                    ? Icon(
-                        Icons.block,
-                        color: Colors.red[700],
-                      )
-                    : Radio(
-                        value: bookingId,
-                        groupValue: selectedSchedule,
-                        onChanged: (value) {
-                          setState(() {
-                            selectedSchedule = value as String?;
-                          });
-                        },
-                      ),
+                if (isFullyBooked)
+                  Icon(
+                    Icons.block,
+                    color: Colors.red[700],
+                  )
+                else
+                  Radio(
+                    value: bookingId,
+                    groupValue: selectedSchedule,
+                    onChanged: isAlreadyBooked || isFullyBooked
+                        ? null
+                        : (value) {
+                            setState(() {
+                              selectedSchedule = value as String?;
+                            });
+                          },
+                  ),
               ],
             ),
           ),
@@ -809,27 +860,55 @@ class _BookingPreviewAndScheduleScreenState
 
   Widget _buildBookNowButton(BuildContext context) {
     return Center(
-      child: ElevatedButton(
-        onPressed: () {
-          if (selectedSchedule != null) {
-            submitBooking(selectedSchedule!);
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Please select a schedule before booking.')),
-            );
-          }
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green[700],
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-        ),
-        child: const Text(
-          'Book Now',
-          style: TextStyle(fontSize: 18, color: Colors.white),
-        ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Back Button
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Navigate back to the previous screen
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  Colors.grey[700], // Gray color for the Back button
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+            ),
+            child: const Text(
+              'Back',
+              style: TextStyle(fontSize: 18, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 20), // Spacing between buttons
+
+          // Book Now Button
+          ElevatedButton(
+            onPressed: () {
+              if (selectedSchedule != null) {
+                submitBooking(selectedSchedule!);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please select a schedule before booking.'),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+            ),
+            child: const Text(
+              'Book Now',
+              style: TextStyle(fontSize: 18, color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }
