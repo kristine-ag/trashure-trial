@@ -13,8 +13,8 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/services.dart' show ByteData, Uint8List, rootBundle;
 import 'dart:html' as html;
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
+// import 'package:pdf/pdf.dart';
+// import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
 
 import 'package:trashure/screens/home_screen.dart';
@@ -45,8 +45,8 @@ class _SelectionScreenState extends State<SelectionScreen> {
     await _checkIfUserHasPendingBooking();
     setState(() {
       _isLoading = false;
-      _canBook = userStat != 'booked'; // Determine _canBook based on userStat
-      _showAsReceipt = userStat == 'done'; // Show receipt if status is 'done'
+      _canBook = userStat != 'booked';
+      _showAsReceipt = userStat == 'done'; 
     });
 
     if (userStat == 'done' || userStat == 'booked') {
@@ -203,7 +203,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
         final userDocSnapshot =
             await bookingDoc.reference.collection('users').doc(userId).get();
         if (userDocSnapshot.exists) {
-          String bookingStatus = bookingDoc['status'] ?? '';
+          // String bookingStatus = bookingDoc['status'] ?? '';
           DateTime bookingDate = (bookingDoc['date'] as Timestamp).toDate();
           DateTime currentDate = DateTime.now();
           _daysLeft = bookingDate.difference(currentDate).inDays;
@@ -277,7 +277,6 @@ class _SelectionScreenState extends State<SelectionScreen> {
   }
 
   Widget _buildPendingBookingScreen() {
-    // Show the rating modal after the screen is built if the userStat is 'done'
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (userStat == 'done' && userReview == 'unrated') {
         _showRatingModal();
@@ -291,8 +290,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
           constraints: BoxConstraints(
             minHeight: MediaQuery.of(context).size.height,
           ),
-          child: Center(
-            child: Padding(
+          child: Center( child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -849,7 +847,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
                       text: 'Sell your segregated recyclable trash to trashure',
                       screen: const BookingScreen(mode: 'booking'),
                     ),
-                    const SizedBox(width: 20), // Add spacing between buttons
+                    const SizedBox(width: 20),
                     _buildSquareButton(
                       context: context,
                       text:

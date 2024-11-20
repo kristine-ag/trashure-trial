@@ -19,17 +19,15 @@ class _PricingScreenState extends State<PricingScreen> {
       final categorySnapshot =
           await FirebaseFirestore.instance.collection('category').get();
 
-      // Check if there are any documents in the snapshot
       if (categorySnapshot.docs.isEmpty) {
         print('No categories found in the database.');
         return [];
       }
 
-      // Log each document to confirm field names
       return categorySnapshot.docs
           .map((doc) {
             print('Category Document: ${doc.data()}');
-            // Return only if 'category_name' exists
+
             if (doc['category_name'] != null) {
               return {
                 'title': doc['category_name'],
@@ -129,7 +127,6 @@ class _PricingScreenState extends State<PricingScreen> {
     );
   }
 
-  // Build a table-like structure for displaying products
   Widget _buildProductTable(BuildContext context, String category) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -157,7 +154,6 @@ class _PricingScreenState extends State<PricingScreen> {
           },
           border: TableBorder.all(color: Colors.grey[300]!),
           children: [
-            // Table Header
             TableRow(
               decoration: BoxDecoration(color: Colors.grey[200]),
               children: [
@@ -167,7 +163,6 @@ class _PricingScreenState extends State<PricingScreen> {
                 _buildTableHeader('Last Updated'),
               ],
             ),
-            // Populate table rows with product data
             ...products
                 .map((product) => _buildProductRow(context, product))
                 .toList(),
@@ -323,7 +318,6 @@ class _PricingScreenState extends State<PricingScreen> {
     );
   }
 
-  // Function to show the modal with last 5 updates of the selected product
   void _showProductDetails(
       BuildContext context, String productId, String productName) {
     showModalBottomSheet(

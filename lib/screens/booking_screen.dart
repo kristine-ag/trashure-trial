@@ -39,7 +39,7 @@ class _BookingScreenState extends State<BookingScreen> {
   LatLng? currentPosition;
   String? currentAddress;
   String? _selectedArea;
-  final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
+  // final LatLng _initialPosition = const LatLng(7.0731, 125.6122);
   final TextEditingController _defaultAddressController =
       TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
@@ -108,7 +108,6 @@ class _BookingScreenState extends State<BookingScreen> {
           LatLng fetchedLatLng =
               LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
 
-          // Check the user's category and update the minimum amount if they are a business user
           String userCategory = userData.get('category') ?? '';
           if (userCategory == 'business') {
             setState(() {
@@ -465,13 +464,10 @@ class _BookingScreenState extends State<BookingScreen> {
                                         currentPosition?.longitude ?? 0.0),
                                     'area': _selectedArea?.toLowerCase(),
                                   });
-                                } catch (e) {
-                                  print('Error updating Firestore: $e');
-                                }
+                                } catch (e) {print('Error updating Firestore: $e');}
                               }
 
-                              Navigator.push(
-                                context,
+                              Navigator.push(context,
                                 MaterialPageRoute(
                                   builder: (context) => BookingPreviewScreen(
                                     selectedItems: selectedItems,
@@ -485,13 +481,10 @@ class _BookingScreenState extends State<BookingScreen> {
                               );
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[
-                                  700], // Set the background color for Next button
+                              backgroundColor: Colors.green[ 700],
                               padding: isMobile
-                                  ? const EdgeInsets.symmetric(
-                                      horizontal: 24, vertical: 12)
-                                  : const EdgeInsets.symmetric(
-                                      horizontal: 32, vertical: 16),
+                                  ? const EdgeInsets.symmetric(horizontal: 24, vertical: 12)
+                                  : const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             ),
                             child: const Text('Next',
                                 style: TextStyle(color: Colors.white)),
@@ -597,7 +590,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     productName,
                     productDescription,
                     productPrice,
-                    originalPrice, // pass original price to card
+                    originalPrice,
                     productImageFile,
                     priceTimestamp,
                     productCategory,

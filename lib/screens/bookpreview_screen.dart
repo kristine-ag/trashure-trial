@@ -88,7 +88,7 @@ class _BookingPreviewAndScheduleScreenState
       nowInPhilippines.location,
       nowInPhilippines.year,
       nowInPhilippines.month,
-      nowInPhilippines.day + 1, 
+      nowInPhilippines.day, 
     );
 
     return bookingsSnapshot.docs.where((doc) {
@@ -137,31 +137,21 @@ class _BookingPreviewAndScheduleScreenState
   }
 
   Future<void> submitBooking(String bookingId) async {
-    try {
-      final User? user = _auth.currentUser;
-      if (user == null) {
-        throw Exception("User not logged in.");
-      }
+    try {final User? user = _auth.currentUser;
+      if (user == null) { throw Exception("User not logged in.");}
 
       final uid = user.uid;
-      final donated = isDonateMode ? 1 : 0;
 
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      if (!userDoc.exists) {
-        throw Exception("User data not found.");
-      }
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (!userDoc.exists) { throw Exception("User data not found.");}
       final userData = userDoc.data()!;
 
-      // Remove sensitive fields if needed
       final filteredUserData = Map<String, dynamic>.from(userData);
       filteredUserData.remove('balance');
 
-      final bookingRef =
-          FirebaseFirestore.instance.collection('bookings').doc(bookingId);
+      final bookingRef = FirebaseFirestore.instance.collection('bookings').doc(bookingId);
       final userRef = bookingRef.collection('users').doc(uid);
 
-      // Fetch the current overall price from the booking document
       final bookingDoc = await bookingRef.get();
       double currentOverallPrice = 0.0;
       if (bookingDoc.exists && bookingDoc.data() != null) {
@@ -170,69 +160,52 @@ class _BookingPreviewAndScheduleScreenState
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
-      // Store basic user info in the user document
       batch.set(userRef, {
-        ...filteredUserData,
-        'mode': widget.mode,
+        ...filteredUserData, 'mode': widget.mode,
       });
 
       double totalUserPrice = 0;
       double totalUserWeight = 0;
 
-      // Calculate totalEstimatedProfit based on selected items, set to 0 if in donate mode
-      double totalEstimatedProfit = widget.selectedItems.entries.fold(
-        0.0,
+      double totalEstimatedProfit = widget.selectedItems.entries.fold(0.0,
         (previousValue, entry) {
           double weight = entry.value['weight'] ?? 0.0;
-          double pricePerKg =
-              isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
+          double pricePerKg = isDonateMode ? 0.0 : (entry.value['price_per_kg'] ?? 0.0);
           return previousValue + (weight * pricePerKg);
         },
       );
 
-      // Deduct collection fee to calculate totalPrice, unless the user is a business user
       const double collectionFee = 40.0;
-      double totalPrice = isBusinessUser
-          ? totalEstimatedProfit
-          : totalEstimatedProfit - collectionFee;
+      double totalPrice = isBusinessUser ? totalEstimatedProfit : totalEstimatedProfit - collectionFee;
 
-      // Loop through each selected item and add its details to the recyclables subcollection
       for (var entry in widget.selectedItems.entries) {
         double weight = entry.value['weight'] ?? 0.0;
         double pricePerKg = entry.value['price_per_kg'] ?? 0.0;
         double itemPrice = weight * pricePerKg;
 
-        // Format price and itemPrice to two decimal places
         pricePerKg = double.parse(pricePerKg.toStringAsFixed(2));
         itemPrice = double.parse(itemPrice.toStringAsFixed(2));
 
         totalUserPrice += itemPrice;
         totalUserWeight += weight;
 
-        // New fields for category and documentId, with default values if null
         String category = entry.value['category'] ?? 'Unknown Category';
         String documentId = entry.value['product_Id'] ?? 'Unknown ID';
 
-        // Prepare the recyclable item data
         Map<String, dynamic> recyclableData = {
           'type': entry.key,
           'weight': weight,
           'price': isDonateMode ? 0.0 : pricePerKg,
           'item_price': isDonateMode ? 0.0 : itemPrice,
-          'timestamp':
-              (entry.value['price_timestamp'] as Timestamp?)?.toDate() ??
-                  DateTime.now(),
+          'timestamp':(entry.value['price_timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
           'category': category,
           'product_Id': documentId,
-          'original_price':
-              isDonateMode ? 0.0 : (entry.value['original_price'] ?? 0.0),
+          'original_price': isDonateMode ? 0.0 : (entry.value['original_price'] ?? 0.0),
         };
 
-        // Add each recyclable item with the conditional fields
         batch.set(userRef.collection('recyclables').doc(), recyclableData);
       }
 
-      // Update user document with total price, weight, and calculated_total_price
       batch.update(userRef, {
         'total_price': isDonateMode
             ? double.parse(totalUserPrice.toStringAsFixed(2))
@@ -243,31 +216,22 @@ class _BookingPreviewAndScheduleScreenState
         'status': "booked",
       });
 
-      // Calculate new overall price
       double newOverallPrice = currentOverallPrice +
           (isDonateMode ? 0.0 : double.parse(totalPrice.toStringAsFixed(2)));
 
-      // Commit all the changes
       await batch.commit();
-
-      // Update the user's status in the main `users` collection
       await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'status': 'booked'});
+          .collection('users').doc(uid).update({'status': 'booked'});
 
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'review': 'unrated',
       }, SetOptions(merge: true));
 
-      // Calculate and update the booking document's overall price and weight
       final usersSnapshot = await bookingRef.collection('users').get();
-      // double overallPrice = 0;
       double overallWeight = 0;
       double calculatedOverallPrice = 0;
       for (var userDoc in usersSnapshot.docs) {
         final userData = userDoc.data() as Map<String, dynamic>;
-        // overallPrice += userData['total_price'] ?? 0;
         overallWeight += userData['total_weight'] ?? 0;
         calculatedOverallPrice += userData['calculated_total_price'] ?? 0;
       }
@@ -282,8 +246,7 @@ class _BookingPreviewAndScheduleScreenState
         const SnackBar(content: Text('Booking confirmed!')),
       );
 
-      Navigator.push(
-        context,
+      Navigator.push(context,
         MaterialPageRoute(
           builder: (context) => const BookingConfirmedScreen(
             bookingDetails: {},

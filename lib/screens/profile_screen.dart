@@ -118,109 +118,81 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickLocationOnMap() async {
-    if (_geoPoint == null) {
-      _showAlertDialog('No initial location available.');
+    if (_geoPoint == null) {_showAlertDialog('No initial location available.');
       return;
     }
 
-    LatLng? selectedLatLng = await Navigator.push(
-      context,
+    LatLng? selectedLatLng = await Navigator.push(context,
       MaterialPageRoute(
-        builder: (context) => MapScreen(
-          initialLocation: _geoPoint!,
-        ),
+        builder: (context) => MapScreen(initialLocation: _geoPoint!,),
       ),
     );
 
     if (selectedLatLng != null) {
-      try {
-        await _getAddressFromLatLng(selectedLatLng);
+      try {await _getAddressFromLatLng(selectedLatLng);
 
         final userId = _auth.currentUser?.uid;
         if (userId == null) return;
 
         await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({
+            .collection('users').doc(userId).update({
           'location':
               GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude),
           'address': _address,
         });
 
         setState(() {
-          _geoPoint =
-              GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude);
+          _geoPoint = GeoPoint(selectedLatLng.latitude, selectedLatLng.longitude);
         });
 
         _showAlertDialog('Address updated successfully!');
       } catch (e) {
         _showAlertDialog('Error fetching address: $e');
       }
-    } else {
-      _showAlertDialog('No location selected.');
-    }
+    } else { _showAlertDialog('No location selected.');}
   }
 
   Future<void> _editPersonalInformation() async {
     final user = _auth.currentUser;
-    if (user == null) {
-      _showAlertDialog('No user is currently logged in.');
-      return;
-    }
+    if (user == null) {_showAlertDialog('No user is currently logged in.'); return;}
 
     final TextEditingController nameController = TextEditingController();
     final TextEditingController phoneController = TextEditingController();
 
-    // Fetch current user's details from Firestore
     try {
       final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+          .collection('users').doc(user.uid).get();
 
       if (userDoc.exists) {
         nameController.text =
             '${userDoc['firstName'] ?? ''} ${userDoc['lastName'] ?? ''}';
         phoneController.text = userDoc['contact'] ?? '';
       }
-    } catch (e) {
-      _showAlertDialog('Error fetching user data: $e');
-      return;
-    }
+    } catch (e) { _showAlertDialog('Error fetching user data: $e');return;}
 
     await showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
-        // Use a specific context for the dialog
         return AlertDialog(
           title: const Text('Edit Personal Information'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
+                controller: nameController, decoration: const InputDecoration(
+                  labelText: 'Full Name', prefixIcon: Icon(Icons.person),border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 10),
               TextField(
-                controller: phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  prefixIcon: Icon(Icons.phone),
-                  border: OutlineInputBorder(),
+                controller: phoneController,decoration: const InputDecoration(
+                  labelText: 'Phone Number',prefixIcon: Icon(Icons.phone),border: OutlineInputBorder(),
                 ),
               ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(), // Use dialogContext to pop
+            TextButton( onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -228,27 +200,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 final newName = nameController.text.trim();
                 final newPhone = phoneController.text.trim();
 
-                // Update Firestore with the name and phone
                 try {
                   final names = newName.split(' ');
                   final firstName = names.isNotEmpty ? names.first : '';
                   final lastName = names.length > 1 ? names.last : '';
 
                   await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user.uid)
-                      .update({
+                      .collection('users').doc(user.uid).update({
                     'firstName': firstName,
                     'lastName': lastName,
                     'contact': newPhone,
                   });
 
-                  // Show a confirmation message after dismissing the dialog
-                  Navigator.of(dialogContext).pop(); // Close the dialog first
+                  Navigator.of(dialogContext).pop(); 
                   _showAlertDialog('Information updated successfully!');
                 } catch (e) {
-                  // Show an error message after dismissing the dialog
-                  Navigator.of(dialogContext).pop(); // Close the dialog first
+                  Navigator.of(dialogContext).pop();
                   _showAlertDialog('Error updating information: $e');
                 }
               },
@@ -269,46 +236,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (result != null) {
-      setState(() {
-        _isUploading = true;
-      });
+      setState(() {_isUploading = true;});
 
       try {
         String filename = '$userId.jpg';
-        Reference storageReference =
-            _storage.ref().child('profile_images/$filename');
+        Reference storageReference = _storage.ref().child('profile_images/$filename');
 
-        SettableMetadata metadata = SettableMetadata(
-          contentType: 'image/jpeg',
-        );
+        SettableMetadata metadata = SettableMetadata( contentType: 'image/jpeg', );
 
         if (kIsWeb) {
           Uint8List? fileBytes = result.files.first.bytes;
           if (fileBytes != null) {
-            // For web, upload the byte data
             UploadTask uploadTask =
                 storageReference.putData(fileBytes, metadata);
             await uploadTask;
           }
         } else {
-          // For mobile, upload the file
           File file = File(result.files.single.path!);
           UploadTask uploadTask = storageReference.putFile(file, metadata);
           await uploadTask;
         }
 
-        // Get the download URL of the image
         String downloadUrl = await storageReference.getDownloadURL();
 
-        // Update Firestore with the new profile image filename
         await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({
+            .collection('users').doc(userId).update({
           'profileImage': filename,
         });
 
-        // Update the local state to show the new profile image
         setState(() {
           _profileImageUrl = downloadUrl;
           _isUploading = false;
@@ -657,13 +612,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: ElevatedButton.icon(
         onPressed: () async {
           try {
-            // Sign out the user from Firebase
             await _auth.signOut();
 
-            // Navigate to the Home Screen (replace 'HomeScreen' with the actual route or widget)
             Navigator.of(context).pushNamedAndRemoveUntil(
-              '/', // Assuming '/home' is the route name for your HomeScreen
-              (Route<dynamic> route) => false, // Removes all previous routes
+              '/',
+              (Route<dynamic> route) => false,
             );
           } catch (e) {
             _showAlertDialog('Error logging out: $e');

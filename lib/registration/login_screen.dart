@@ -27,11 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (_formKey.currentState!.validate()) {
       try {
-        UserCredential userCredential =
-            await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
+        UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: _emailController.text.trim(), password: _passwordController.text,);
 
         User? user = userCredential.user;
 
@@ -42,20 +39,13 @@ class _LoginScreenState extends State<LoginScreen> {
           });
         } else if (user != null) {
           final docSnapshot = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
+              .collection('users') .doc(user.uid) .get();
 
           if (docSnapshot.exists && docSnapshot.get('contact') == '') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ContactSetupScreen(userId: user.uid),
-              ),
+            Navigator.pushReplacement(context,
+              MaterialPageRoute( builder: (context) => ContactSetupScreen(userId: user.uid)),
             );
-          } else {
-            _redirectToLastRoute();
-          }
+          } else { _redirectToLastRoute(context); }
         }
       } on FirebaseAuthException catch (e) {
         setState(() {
@@ -75,16 +65,16 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _redirectToLastRoute() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? lastRoute = prefs.getString('lastRoute');
+  Future<void> _redirectToLastRoute(BuildContext context) async {
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  String? lastRoute = prefs.getString('lastRoute');
 
-    if (lastRoute != null && lastRoute.isNotEmpty) {
-      Navigator.pushReplacementNamed(context, lastRoute);
-    } else {
-      Navigator.pushReplacementNamed(context, '/');
-    }
+  if (lastRoute != null && lastRoute.isNotEmpty) {
+    Navigator.pushReplacementNamed(context, lastRoute);
+  } else {
+    Navigator.pushReplacementNamed(context, '/');
   }
+}
 
   Future<void> _resetPassword() async {
     final TextEditingController resetEmailController = TextEditingController();

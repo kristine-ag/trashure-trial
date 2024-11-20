@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors
+
 import 'package:flutter/material.dart';
 import 'package:trashure/components/appbar.dart';
 import 'package:trashure/screens/booking_screen.dart';
@@ -17,7 +19,6 @@ class _SustainabilityAwarenessPageState
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header Section
             _buildHeaderSection(),
 
             // Problem with Waste (Green Background with Image)
@@ -122,9 +123,7 @@ class _SustainabilityAwarenessPageState
                 ],
               ),
             ),
-
             SizedBox(height: 20),
-
             // Why Recycling is Important (White Background with Image)
             Container(
               color: Colors.white,
@@ -179,7 +178,6 @@ class _SustainabilityAwarenessPageState
                 ],
               ),
             ),
-
             // Step-by-Step Guide on Waste Segregation (Enhanced Information Section)
             Container(
               padding: EdgeInsets.all(16.0),
@@ -387,9 +385,7 @@ class _SustainabilityAwarenessPageState
                 ],
               ),
             ),
-
             SizedBox(height: 20),
-
             // Recycling Tips Section (White Background)
             Container(
               width: MediaQuery.of(context).size.width,
@@ -507,7 +503,7 @@ class _SustainabilityAwarenessPageState
               child: Container(
                 width: MediaQuery.of(context).size.width,
                 padding:
-                    EdgeInsets.all(16.0), // Adds padding inside the container
+                    EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
                   color: Colors.green[600],
                   boxShadow: [
@@ -532,7 +528,6 @@ class _SustainabilityAwarenessPageState
                 ),
               ),
             ),
-            // Book Now Button
           ],
         ),
       ),

@@ -123,7 +123,6 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
         });
       }
 
-      // Sort by most recent date
       bookingHistory.sort((a, b) => b['date'].compareTo(a['date']));
 
       setState(() {
