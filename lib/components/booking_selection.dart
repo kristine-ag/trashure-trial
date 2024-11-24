@@ -442,7 +442,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
                                   ? 'Total Price Received: ₱${_currentBookingDetails['final_total_price']}'
                                   : 'Total Price: ₱${_currentBookingDetails['total_price']}')
                               : (_currentBookingDetails['status'] == 'collected'
-                                  ? 'Total Price Received: ₱${_currentBookingDetails['final_total_price'] - 40}'
+                                  ? 'Total Price Received: ₱${_currentBookingDetails['final_total_price']} - 40 = ₱${_currentBookingDetails['final_total_price'] - 40}'
                                   : 'Total Price: ₱${_currentBookingDetails['total_price']} - 40 = ₱${_currentBookingDetails['calculated_total_price']}')),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
@@ -482,27 +482,39 @@ class _SelectionScreenState extends State<SelectionScreen> {
       children: [
         TableRow(
           decoration: BoxDecoration(color: Colors.grey[300]),
-          children: const [
-            Padding(
+          children: [
+            const Padding(
               padding: EdgeInsets.all(8.0),
               child:
                   Text('Type', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            Padding(
+            const Padding(
               padding: EdgeInsets.all(8.0),
               child:
                   Text('Weight', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            Padding(
+            if (userStat == 'done')
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Text('Final Weight',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            const Padding(
               padding: EdgeInsets.all(8.0),
               child: Text('Price per kg',
                   style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            Padding(
+            const Padding(
               padding: EdgeInsets.all(8.0),
-              child:
-                  Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text('Item Price',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
             ),
+            if (userStat == 'done')
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Text('Final Item Price',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
           ],
         ),
         ...recyclables.map<TableRow>((recyclable) {
@@ -516,15 +528,28 @@ class _SelectionScreenState extends State<SelectionScreen> {
                 padding: const EdgeInsets.all(8.0),
                 child: Text('${recyclable['weight'] ?? 0} kg'),
               ),
+              if (userStat == 'done')
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text('${recyclable['final_weight'] ?? 0} kg'),
+                ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: Text('₱${recyclable['price'] ?? 0}'),
+                child: Text(
+                  '₱${(recyclable['price'] ?? 0).toStringAsFixed(2)}',
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
                     '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}'),
               ),
+              if (userStat == 'done')
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                      '₱${((recyclable['final_item_price'] ?? 0)).toStringAsFixed(2)}'),
+                ),
             ],
           );
         }).toList(),
@@ -748,16 +773,24 @@ class _SelectionScreenState extends State<SelectionScreen> {
                 ),
                 pw.SizedBox(height: 10),
                 pw.Text(
-                  'Total Weight: ${booking['total_weight']} kg',
+                  'Total Weight Collected: ${booking['final_total_weight']} kg',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Text(
                   booking['mode'] == 'donate'
-                      ? 'Total Price: PHP0'
-                      : booking['category'] == 'business'
-                          ? 'Total Price: PHP ${booking['total_price']}'
-                          : 'Total Price: PHP ${booking['total_price']} - 40 = PHP${booking['calculated_total_price']}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ? (_currentBookingDetails['status'] == 'collected'
+                          ? 'Total Price Received: PHP0'
+                          : 'Total Price: PHP0')
+                      : (_currentBookingDetails['category'] == 'business'
+                          ? (_currentBookingDetails['status'] == 'collected'
+                              ? 'Total Price Received: PHP${_currentBookingDetails['final_total_price']}'
+                              : 'Total Price: PHP${_currentBookingDetails['total_price']}')
+                          : (_currentBookingDetails['status'] == 'collected'
+                              ? 'Total Price Received: PHP${_currentBookingDetails['final_total_price']} - 40 = PHP${_currentBookingDetails['final_total_price'] - 40}'
+                              : 'Total Price: PHP${_currentBookingDetails['total_price']} - 40 = PHP${_currentBookingDetails['calculated_total_price']}')),
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
               ],
             );

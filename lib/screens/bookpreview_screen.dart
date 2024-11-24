@@ -626,7 +626,7 @@ class _BookingPreviewAndScheduleScreenState
             ),
             const SizedBox(height: 10),
             const Text(
-              'District',
+              'Landmark: ',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
