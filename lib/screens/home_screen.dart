@@ -1,11 +1,13 @@
 // ignore_for_file: prefer_const_constructors
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // For rendering Markdown
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:trashure/components/appbar.dart';
+import 'package:trashure/components/ban_user.dart';
 import 'package:trashure/components/footer.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,10 +20,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Marker> _warehouseMarkers = [];
   bool _isInteractingWithMap = false;
+  bool _isBanned = false;
+  List<Map<String, dynamic>> _reports = [];
 
   @override
   void initState() {
     super.initState();
+    _checkUserReports();
     _fetchWarehouseLocations();
   }
 
@@ -47,51 +52,187 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _checkUserReports() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final userId = user.uid;
+
+      // Fetch user's document from Firestore
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (!userDoc.exists) return;
+
+      final reportsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('reports')
+          .orderBy('datetimestamp', descending: true)
+          .get();
+
+      if (reportsSnapshot.docs.isEmpty) return;
+
+      final reports = reportsSnapshot.docs.map((doc) {
+        return {
+          'datetimestamp': (doc['datetimestamp'] as Timestamp).toDate(),
+          'reason': doc['reason'],
+        };
+      }).toList();
+
+      setState(() {
+        _reports = reports;
+        _isBanned = reports.length >= 3;
+      });
+
+      // Check if 'review_status' field exists and is set to 'reported'
+      final reviewStatus = userDoc.data()?['review_status'];
+      if (reviewStatus == 'reported') {
+        if (_isBanned) {
+          _redirectToBanPage();
+        } else if (reports.length == 1 || reports.length == 2) {
+          _showWarning(reports.length, userId);
+        }
+      }
+
+      // Fetch user's reports
+    } catch (e) {
+      print('Error checking user reports: $e');
+    }
+  }
+
+  void _redirectToBanPage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BanPage(reports: _reports),
+        ),
+      );
+    });
+  }
+
+  void _showWarning(int reportCount, String userId) {
+    final warningMessage = reportCount == 1
+        ? 'You have 1 report. Please be cautious as 3 reports will lead to a temporary ban.'
+        : 'You have 2 reports. Another report will result in a temporary ban.';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Warning'),
+          content: Text(warningMessage),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                // Change 'review_status' to 'understood'
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(userId)
+                    .update({'review_status': 'understood'});
+
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text(
+                'Understood',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showBanWarningDialog(String userId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Account Under Review'),
+          content: const Text(
+              'Your account has been flagged for review due to reports against your account. Please proceed cautiously.'),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                // Change 'review_status' to 'understood'
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(userId)
+                    .update({'review_status': 'understood'});
+
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text(
+                'Understood',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: CustomAppBar(),
-      body: NotificationListener<OverscrollIndicatorNotification>(
-        onNotification: (OverscrollIndicatorNotification notification) {
-          // Disable the glow effect at the edges of the scroll view
-          notification.disallowIndicator();
-          return true;
-        },
-        child: SingleChildScrollView(
-          physics: _isInteractingWithMap
-              ? const NeverScrollableScrollPhysics() // Disable scrolling when interacting with map
-              : const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _buildBanner(context),
-              const SizedBox(height: 20),
-              _buildDirectDeliverySection(context),
-              const SizedBox(height: 40),
-              _buildStepByStepGuide(context),
-              const SizedBox(height: 40),
-              _buildMaterialTypesSection(context),
-              const SizedBox(height: 40),
-              Divider(
-                color: Colors.grey[400],
-                thickness: 1,
-                height: 1,
+    return _isBanned
+        ? const SizedBox.shrink() // Prevent access to content if banned
+        : Scaffold(
+            appBar: CustomAppBar(),
+            body: NotificationListener<OverscrollIndicatorNotification>(
+              onNotification: (OverscrollIndicatorNotification notification) {
+                // Disable the glow effect at the edges of the scroll view
+                notification.disallowIndicator();
+                return true;
+              },
+              child: SingleChildScrollView(
+                physics: _isInteractingWithMap
+                    ? const NeverScrollableScrollPhysics() // Disable scrolling when interacting with map
+                    : const BouncingScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildBanner(context),
+                    const SizedBox(height: 20),
+                    _buildDirectDeliverySection(context),
+                    const SizedBox(height: 40),
+                    _buildStepByStepGuide(context),
+                    const SizedBox(height: 40),
+                    _buildMaterialTypesSection(context),
+                    const SizedBox(height: 40),
+                    Divider(
+                      color: Colors.grey[400],
+                      thickness: 1,
+                      height: 1,
+                    ),
+                    const Footer(),
+                  ],
+                ),
               ),
-              const Footer(),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          );
   }
 
   Widget _buildBanner(BuildContext context) {
     return Stack(
       children: [
         Image.asset(
-          'assets/images/login.jpg', // Replace with your image path
+          'assets/images/login.jpg',
           width: double.infinity,
-          height: MediaQuery.of(context).size.height * 1, // Use relative height
+          height: MediaQuery.of(context).size.height * 1,
           fit: BoxFit.cover,
         ),
         Positioned.fill(
@@ -550,7 +691,6 @@ class ProductDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine if the screen size is larger than a certain width (desktop vs. mobile)
     double paddingValue = MediaQuery.of(context).size.width > 600 ? 50.0 : 16.0;
 
     return Scaffold(
@@ -565,8 +705,7 @@ class ProductDetailsPage extends StatelessWidget {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(
-            horizontal: paddingValue, vertical: 16.0), // Dynamic padding
+        padding: EdgeInsets.symmetric(horizontal: paddingValue, vertical: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -603,51 +742,3 @@ class ProductDetailsPage extends StatelessWidget {
     );
   }
 }
-
-
-
-// class MaterialDetailsPage extends StatelessWidget {
-//   final String title;
-//   final String description;
-//   final List<String> examples;
-
-//   const MaterialDetailsPage({
-//     super.key,
-//     required this.title,
-//     required this.description,
-//     required this.examples,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text(title),
-//         backgroundColor: Colors.green,
-//       ),
-//       body: Padding(
-//         padding: const EdgeInsets.all(16.0),
-//         child: Column(
-//           children: [
-//             Text(
-//               description,
-//               style: const TextStyle(fontSize: 16),
-//             ),
-//             const SizedBox(height: 20),
-//             Expanded(
-//               child: ListView.builder(
-//                 itemCount: examples.length,
-//                 itemBuilder: (context, index) {
-//                   return Image.network(
-//                     examples[index],
-//                     fit: BoxFit.cover,
-//                   );
-//                 },
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }

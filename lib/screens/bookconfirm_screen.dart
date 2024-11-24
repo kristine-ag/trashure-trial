@@ -7,7 +7,12 @@ import 'package:intl/intl.dart';
 
 class BookingConfirmedScreen extends StatefulWidget {
   final Map<String, dynamic> bookingDetails;
-  const BookingConfirmedScreen({super.key, required this.bookingDetails});
+  final Map<String, dynamic> selectedItems;
+  const BookingConfirmedScreen({
+    super.key,
+    required this.bookingDetails,
+    required this.selectedItems,
+  });
 
   @override
   _BookingConfirmedScreenState createState() => _BookingConfirmedScreenState();
@@ -15,6 +20,7 @@ class BookingConfirmedScreen extends StatefulWidget {
 
 class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
   Map<String, dynamic> _currentBookingDetails = {};
+  String? _bookingId;
 
   @override
   void initState() {
@@ -27,7 +33,6 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
     if (userId == null) return;
 
     try {
-      // Retrieve all bookings and manually check the user's status in each one, sorted by date descending
       final bookingsSnapshot = await FirebaseFirestore.instance
           .collection('bookings')
           .orderBy('date', descending: true) // Sort by date in descending order
@@ -38,7 +43,11 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
             await bookingDoc.reference.collection('users').doc(userId).get();
 
         if (userDocSnapshot.exists && userDocSnapshot['status'] == 'booked') {
-          // User has an active "booked" status in this booking document
+          // Set _bookingId when a valid booking is found
+          setState(() {
+            _bookingId = bookingDoc.id; // Assign booking ID
+          });
+
           Timestamp bookingDateTimestamp = bookingDoc['date'];
           DateTime bookingDate = bookingDateTimestamp.toDate();
 
@@ -65,6 +74,7 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
               'vehicle': bookingDoc['vehicle'],
               'start_time': bookingDoc['start_time'],
               'end_time': bookingDoc['end_time'],
+              'user_category': userDocSnapshot['category'],
               'user_status': userDocSnapshot['status'],
               'status': bookingDoc['status'],
               'recyclables': recyclables,
@@ -79,11 +89,131 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
         }
       }
 
-      // If no booking is found
+      // Log if no booking is found
       print("No active booking found for user.");
     } catch (e) {
       print('Error fetching booking details: $e');
     }
+  }
+
+  Future<void> _cancelBooking() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
+    // Check if _bookingId is null
+    if (userId == null || _bookingId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to find booking to cancel.')),
+      );
+      print('_bookingId or userId is null. Cannot cancel booking.');
+      return;
+    }
+
+    try {
+      print(
+          'Attempting to cancel booking with ID: $_bookingId for user: $userId');
+
+      // Fetch user's data for adjustments
+      final userDocSnapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .doc(_bookingId)
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (!userDocSnapshot.exists) {
+        print('User document does not exist under the booking.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Booking not found for this user.')),
+        );
+        return;
+      }
+
+      final userData = userDocSnapshot.data();
+      double userTotalPrice = userData?['total_price'] ?? 0.0;
+      double userTotalWeight = userData?['total_weight'] ?? 0.0;
+      double userCalculatedTotalPrice =
+          userData?['calculated_total_price'] ?? 0.0;
+
+      final bookingDocRef =
+          FirebaseFirestore.instance.collection('bookings').doc(_bookingId);
+
+      final bookingDocSnapshot = await bookingDocRef.get();
+      if (bookingDocSnapshot.exists) {
+        final bookingData = bookingDocSnapshot.data();
+
+        double overallPrice = bookingData?['overall_price'] ?? 0.0;
+        double overallWeight = bookingData?['overall_weight'] ?? 0.0;
+        double calculatedOverallPrice =
+            bookingData?['calculated_overall_price'] ?? 0.0;
+
+        await bookingDocRef.update({
+          'overall_price':
+              (overallPrice - userTotalPrice).clamp(0.0, double.infinity),
+          'overall_weight':
+              (overallWeight - userTotalWeight).clamp(0.0, double.infinity),
+          'calculated_overall_price':
+              (calculatedOverallPrice - userCalculatedTotalPrice)
+                  .clamp(0.0, double.infinity),
+        });
+      }
+
+      final recyclablesCollection = bookingDocRef
+          .collection('users')
+          .doc(userId)
+          .collection('recyclables');
+      final recyclablesSnapshot = await recyclablesCollection.get();
+
+      for (var recyclableDoc in recyclablesSnapshot.docs) {
+        await recyclableDoc.reference.delete();
+      }
+
+      await bookingDocRef.collection('users').doc(userId).delete();
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .update({'status': 'unbooked'});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking successfully canceled!')),
+      );
+
+      Navigator.pushNamed(context, '/Book');
+    } catch (e) {
+      print('Error canceling booking: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error canceling booking: $e')),
+      );
+    }
+  }
+
+  void _showCancelConfirmationModal() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Cancel Booking'),
+          content: const Text(
+              'Are you sure you want to cancel this booking? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('No'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close the modal
+                await _cancelBooking();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -131,6 +261,22 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
               ),
               child: const Text(
                 'RETURN HOME',
+                style: TextStyle(fontSize: 18, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _showCancelConfirmationModal,
+              style: ElevatedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                backgroundColor: Colors.red[700],
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text(
+                'CANCEL BOOKING',
                 style: TextStyle(fontSize: 18, color: Colors.white),
               ),
             ),
@@ -270,8 +416,10 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> {
                 ),
                 Text(
                   _currentBookingDetails['mode'] == 'donate'
-                      ? 'Total Price: ₱${booking['total_price']}'
-                      : 'Total Price: ₱${booking['total_price']} - 40 = ₱${booking['calculated_total_price']}',
+                      ? 'Total Price: ₱0'
+                      : (_currentBookingDetails['user_category'] == 'business'
+                          ? 'Total Price: ₱${booking['total_price']}'
+                          : 'Total Price: ₱${booking['total_price']} - 40 = ₱${booking['calculated_total_price']}'),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,

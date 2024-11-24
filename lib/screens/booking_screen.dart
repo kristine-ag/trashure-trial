@@ -91,48 +91,138 @@ class _BookingScreenState extends State<BookingScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchAddressFromFirestore() async {
-    if (user != null) {
-      try {
-        DocumentSnapshot userData = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user!.uid)
-            .get();
-        if (userData.exists) {
-          String fetchedAddress = userData.get('address') ?? '';
-          String fetchedContact = userData.get('contact') ?? '';
-          String fetchedLandmark = userData.get('landmark') ?? '';
+Future<void> _fetchAddressFromFirestore() async {
+  if (user != null) {
+    try {
+      DocumentSnapshot userData = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .get();
+      if (userData.exists) {
+        String fetchedAddress = userData.get('address') ?? '';
+        String fetchedContact = userData.get('contact') ?? '';
+        String fetchedLandmark = userData.get('landmark') ?? '';
 
-          GeoPoint fetchedLocation =
-              userData.get('location') ?? GeoPoint(7.0731, 125.6122);
-          LatLng fetchedLatLng =
-              LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
+        GeoPoint fetchedLocation =
+            userData.get('location') ?? GeoPoint(7.0731, 125.6122);
+        LatLng fetchedLatLng =
+            LatLng(fetchedLocation.latitude, fetchedLocation.longitude);
 
-          String userCategory = userData.get('category') ?? '';
-          if (userCategory == 'business') {
-            setState(() {
-              minimumBookingAmount = 500.0;
-            });
-          }
-
+        String userCategory = userData.get('category') ?? '';
+        if (userCategory == 'business') {
           setState(() {
-            currentAddress = fetchedAddress;
-            _defaultAddressController.text = fetchedAddress;
-            _contactController.text = fetchedContact;
-            _landmarkController.text = fetchedLandmark;
-            currentPosition = fetchedLatLng;
-            _cameraPosition = CameraPosition(target: fetchedLatLng, zoom: 15);
+            minimumBookingAmount = 500.0;
           });
-
-          mapController?.animateCamera(CameraUpdate.newLatLng(fetchedLatLng));
-          _addMarker(fetchedLatLng, fetchedAddress);
-          _updateDistrict(fetchedAddress);
         }
-      } catch (e) {
-        print('Error fetching address and location from Firestore: $e');
+
+        setState(() {
+          currentAddress = fetchedAddress;
+          _defaultAddressController.text = fetchedAddress;
+          _contactController.text = fetchedContact;
+          _landmarkController.text = fetchedLandmark;
+          currentPosition = fetchedLatLng;
+          _cameraPosition = CameraPosition(target: fetchedLatLng, zoom: 15);
+        });
+
+        mapController?.animateCamera(CameraUpdate.newLatLng(fetchedLatLng));
+        _addMarker(fetchedLatLng, fetchedAddress);
+        await _updateDistrictAndCheckSchedule(fetchedAddress);
       }
+    } catch (e) {
+      print('Error fetching address and location from Firestore: $e');
     }
   }
+}
+
+Future<void> _updateDistrictAndCheckSchedule(String address) async {
+  for (var area in _areas) {
+    if (address.toUpperCase().contains(area)) {
+      setState(() {
+        _selectedArea = area;
+      });
+
+      final hasSchedule = await _checkDistrictSchedule(area);
+      if (!hasSchedule) {
+        await _showNoScheduleModal();
+      }
+      break;
+    }
+  }
+}
+
+Future<bool> _checkDistrictSchedule(String district) async {
+  final bookingsSnapshot = await FirebaseFirestore.instance
+      .collection('bookings')
+      .where('location', isEqualTo: district)
+      .where('status', whereIn: ['pending', 'collecting'])
+      .get();
+
+  return bookingsSnapshot.docs.isNotEmpty;
+}
+
+Future<List<String>> _getDistrictsWithSchedules() async {
+  final bookingsSnapshot = await FirebaseFirestore.instance
+      .collection('bookings')
+      .where('status', whereIn: ['pending', 'collecting'])
+      .get();
+
+  final districts = bookingsSnapshot.docs
+      .map((doc) => doc['location'] as String)
+      .toSet()
+      .toList();
+
+  return districts;
+}
+
+Future<void> _showNoScheduleModal() async {
+  final districtsWithSchedules = await _getDistrictsWithSchedules();
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('No Schedule Available'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Currently, there is no booking schedule for your district.',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 15),
+            const Text(
+              'Below are the districts with available schedules:',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 10),
+            ...districtsWithSchedules.map((district) => Text(
+                  '- $district',
+                  style: const TextStyle(fontSize: 14),
+                )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.pushNamed(context, '/');
+            },
+            child: const Text('Go Back Home'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Continue Booking'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 
   Future<void> _getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -382,11 +472,26 @@ class _BookingScreenState extends State<BookingScreen> {
                               double minimumAmount =
                                   isDonateMode ? 100.0 : minimumBookingAmount;
                               if (_totalEstimatedProfit.value < minimumAmount) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                        'Please add more recyclables to reach the minimum amount of ₱${minimumAmount.toStringAsFixed(0)}.'),
-                                  ),
+                                showDialog(
+                                  context: context,
+                                  builder: (BuildContext context) {
+                                    return AlertDialog(
+                                      title: const Text(
+                                          'Minimum Amount Not Reached'),
+                                      content: Text(
+                                        'Please add more recyclables to reach the minimum amount of ₱${minimumAmount.toStringAsFixed(0)}.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.of(context)
+                                                .pop(); // Close the dialog
+                                          },
+                                          child: const Text('OK'),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 );
                                 return;
                               }
@@ -464,10 +569,13 @@ class _BookingScreenState extends State<BookingScreen> {
                                         currentPosition?.longitude ?? 0.0),
                                     'area': _selectedArea?.toLowerCase(),
                                   });
-                                } catch (e) {print('Error updating Firestore: $e');}
+                                } catch (e) {
+                                  print('Error updating Firestore: $e');
+                                }
                               }
 
-                              Navigator.push(context,
+                              Navigator.push(
+                                context,
                                 MaterialPageRoute(
                                   builder: (context) => BookingPreviewScreen(
                                     selectedItems: selectedItems,
@@ -481,10 +589,12 @@ class _BookingScreenState extends State<BookingScreen> {
                               );
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[ 700],
+                              backgroundColor: Colors.green[700],
                               padding: isMobile
-                                  ? const EdgeInsets.symmetric(horizontal: 24, vertical: 12)
-                                  : const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                  ? const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 12)
+                                  : const EdgeInsets.symmetric(
+                                      horizontal: 32, vertical: 16),
                             ),
                             child: const Text('Next',
                                 style: TextStyle(color: Colors.white)),

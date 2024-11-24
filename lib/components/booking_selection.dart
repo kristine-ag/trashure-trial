@@ -33,6 +33,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
   int? _daysLeft;
   bool _showAsReceipt = false;
   String userStat = '';
+  String userCat = '';
   String userReview = '';
 
   @override
@@ -46,7 +47,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
     setState(() {
       _isLoading = false;
       _canBook = userStat != 'booked';
-      _showAsReceipt = userStat == 'done'; 
+      _showAsReceipt = userStat == 'done';
     });
 
     if (userStat == 'done' || userStat == 'booked') {
@@ -126,21 +127,6 @@ class _SelectionScreenState extends State<SelectionScreen> {
                 style: TextStyle(fontSize: 18, color: Colors.white),
               ),
             ),
-            // ElevatedButton(
-            //   onPressed: () async {
-            //     await _submitReview(rating, feedbackController.text);
-            //     Navigator.of(context).pop();
-            //   },
-            //   style: ElevatedButton.styleFrom(
-            //     backgroundColor: Colors.green[700],
-            //   ),
-            //   child: const Text(
-            //     'Submit',
-            //     style: TextStyle(
-            //       color: Colors.white,
-            //     ),
-            //   ),
-            // ),
           ],
         );
       },
@@ -151,31 +137,78 @@ class _SelectionScreenState extends State<SelectionScreen> {
     final userId = FirebaseAuth.instance.currentUser?.uid;
 
     if (userId != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
+      try {
+        // Fetch user details
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
 
-      final firstName = userDoc['firstName'] ?? 'Anonymous';
-      final lastName = userDoc['lastName'] ?? '';
+        final firstName = userDoc['firstName'] ?? 'Anonymous';
+        final lastName = userDoc['lastName'] ?? '';
+        final userName = '$firstName $lastName';
 
-      final userName = '$firstName $lastName';
+        // Fetch the user's active booking ID
+        String? bookingId;
+        final bookingsSnapshot =
+            await FirebaseFirestore.instance.collection('bookings').get();
 
-      await FirebaseFirestore.instance.collection('customer_review').add({
-        'user_id': userId,
-        'name': userName,
-        'rating': rating,
-        'feedback': feedback,
-        'date': Timestamp.now(),
-      });
+        for (var bookingDoc in bookingsSnapshot.docs) {
+          final userBookingDoc =
+              await bookingDoc.reference.collection('users').doc(userId).get();
 
-      Fluttertoast.showToast(
-        msg: 'Thank you for your feedback!',
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-      );
+          if (userBookingDoc.exists) {
+            bookingId = bookingDoc.id; // Set the booking ID
+            break; // Assuming the user can only have one active booking at a time
+          }
+        }
+
+        // If booking ID is found, include it in the review
+        final reviewData = {
+          'user_id': userId,
+          'name': userName,
+          'rating': rating,
+          'feedback': feedback,
+          'date': Timestamp.now(),
+        };
+
+        if (bookingId != null) {
+          reviewData['booking_id'] = bookingId;
+        }
+
+        // Add the review to the `customer_review` collection
+        await FirebaseFirestore.instance
+            .collection('customer_review')
+            .add(reviewData);
+
+        await FirebaseFirestore.instance
+            .collection('bookings')
+            .doc(bookingId)
+            .collection('customer_review')
+            .add(reviewData);
+
+        // Update the user's review status
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .update({'review': 'rated'});
+
+        Fluttertoast.showToast(
+          msg: 'Thank you for your feedback!',
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.green,
+          textColor: Colors.white,
+        );
+      } catch (e) {
+        Fluttertoast.showToast(
+          msg: 'Error submitting review: $e',
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+      }
     }
   }
 
@@ -191,6 +224,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
       if (!userDoc.exists) return false;
 
       // Update the class-level userStat variable directly
+      userCat = userDoc['category'] ?? '';
       userStat = userDoc['status'] ?? '';
       userReview = userDoc['review'] ?? '';
 
@@ -222,6 +256,8 @@ class _SelectionScreenState extends State<SelectionScreen> {
               'item_price': price,
               'quantity': recyclableDoc.data()['quantity'] ?? 0,
               'weight': weight,
+              'final_item_price': recyclableDoc.data()['final_item_price'] ?? 0,
+              'final_weight': recyclableDoc.data()['final_weight'] ?? 0,
             });
           }
 
@@ -234,6 +270,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
               'start_time': bookingDoc['start_time'],
               'end_time': bookingDoc['end_time'],
               'status': userDocSnapshot['status'],
+              'category': userDocSnapshot['category'],
               'recyclables': recyclables,
               'mode': mode,
               'total_weight':
@@ -290,7 +327,8 @@ class _SelectionScreenState extends State<SelectionScreen> {
           constraints: BoxConstraints(
             minHeight: MediaQuery.of(context).size.height,
           ),
-          child: Center( child: Padding(
+          child: Center(
+            child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -333,6 +371,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
       'driver': _currentBookingDetails['driver'] ?? 'Not Yet Assigned',
       'vehicle': _currentBookingDetails['vehicle'] ?? 'Not Yet Assigned',
       'status': _currentBookingDetails['status'] ?? 'booked',
+      'category': _currentBookingDetails['category'] ?? '',
       'recyclables': _currentBookingDetails['recyclables'] ?? [],
       'total_weight': _currentBookingDetails['total_weight'] ?? 0.0,
       'total_price': _currentBookingDetails['total_price'] ?? 0.0,
@@ -342,327 +381,419 @@ class _SelectionScreenState extends State<SelectionScreen> {
           _currentBookingDetails['calculated_total_price'] ?? 0.0,
     };
 
-    return Column(
-      children: [
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Date: $formattedBookingDate',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text('Driver: ${booking['driver']}'),
-                Text('Vehicle: ${booking['vehicle']}'),
-                Text(
-                  'Status: ${booking['status']}',
-                  style: TextStyle(
-                    color: booking['status'] == 'collected'
-                        ? Colors.green
-                        : Colors.orange,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Divider(),
-                const SizedBox(height: 16),
-                const Text(
-                  'Recyclables',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                Table(
-                  columnWidths: const {
-                    0: FlexColumnWidth(3),
-                    1: FlexColumnWidth(2),
-                    2: FlexColumnWidth(2),
-                    3: FlexColumnWidth(2),
-                  },
-                  border: TableBorder.all(color: Colors.grey, width: 0.5),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        return Column(
+          children: [
+            Card(
+              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TableRow(
-                      decoration: BoxDecoration(color: Colors.grey[300]),
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text('Type',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text('Weight',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text('Price per kg',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text('Total',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ],
+                    Text(
+                      'Date: $formattedBookingDate',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    ...booking['recyclables'].map<TableRow>((recyclable) {
-                      return TableRow(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(recyclable['type'] ?? 'Unknown'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text('${recyclable['weight'] ?? 0} kg'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text('₱${recyclable['price'] ?? 0}'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                                '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}'),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                    const SizedBox(height: 4),
+                    Text('Driver: ${booking['driver']}'),
+                    Text('Vehicle: ${booking['vehicle']}'),
+                    Text(
+                      'Status: ${booking['status']}',
+                      style: TextStyle(
+                        color: booking['status'] == 'collected'
+                            ? Colors.green
+                            : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Recyclables',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    isMobile
+                        ? _buildRecyclablesAsList(booking['recyclables'])
+                        : _buildRecyclablesAsTable(booking['recyclables']),
+                    const SizedBox(height: 12),
+                    Text(
+                      booking['status'] == 'collected'
+                          ? 'Total Weight Collected: ${booking['final_total_weight']} kg'
+                          : 'Total Weight: ${booking['total_weight']} kg',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    Text(
+                      booking['mode'] == 'donate'
+                          ? (_currentBookingDetails['status'] == 'collected'
+                              ? 'Total Price Received: ₱0'
+                              : 'Total Price: ₱0')
+                          : (_currentBookingDetails['category'] == 'business'
+                              ? (_currentBookingDetails['status'] == 'collected'
+                                  ? 'Total Price Received: ₱${_currentBookingDetails['final_total_price']}'
+                                  : 'Total Price: ₱${_currentBookingDetails['total_price']}')
+                              : (_currentBookingDetails['status'] == 'collected'
+                                  ? 'Total Price Received: ₱${_currentBookingDetails['final_total_price'] - 40}'
+                                  : 'Total Price: ₱${_currentBookingDetails['total_price']} - 40 = ₱${_currentBookingDetails['calculated_total_price']}')),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  booking['status'] == 'collected'
-                      ? 'Total Weight Collected: ${booking['final_total_weight']} kg'
-                      : 'Total Weight: ${booking['total_weight']} kg',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                Text(
-                  booking['mode'] == 'donate'
-                      ? (_currentBookingDetails['status'] == 'collected'
-                          ? 'Total Price Received: ₱0'
-                          : 'Total Price: ₱0')
-                      : (_currentBookingDetails['status'] == 'collected'
-                          ? 'Total Price Received: ₱${_currentBookingDetails['final_total_price'] - 40}'
-                          : 'Total Price: ₱${_currentBookingDetails['total_price']} - 40 = ₱${_currentBookingDetails['calculated_total_price']}'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            // Check if the screen width is narrow (mobile mode)
-            bool isMobile = constraints.maxWidth < 600;
-
-            return isMobile
+            const SizedBox(height: 20),
+            isMobile
                 ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () async {
-                          final userId = FirebaseAuth.instance.currentUser?.uid;
-                          if (userId != null) {
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(userId)
-                                .update({'status': 'unbooked'});
-                          }
-
-                          // Navigate to the home screen
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const HomeScreen(),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 50, vertical: 15),
-                        ),
-                        child: const Text(
-                          'Go to Home',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(
-                          height:
-                              20), // Add spacing between buttons in column mode
-                      ElevatedButton(
-                        onPressed: () async {
-                          await _downloadReceipt();
-                          final userId = FirebaseAuth.instance.currentUser?.uid;
-                          if (userId != null) {
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(userId)
-                                .update({'status': 'unbooked'});
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 50, vertical: 15),
-                        ),
-                        child: const Text(
-                          'Download Receipt',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
-                      ),
-                    ],
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: _buildActionButtons(),
                   )
                 : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () async {
-                          final userId = FirebaseAuth.instance.currentUser?.uid;
-                          if (userId != null) {
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(userId)
-                                .update({'status': 'unbooked'});
-                          }
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: _buildActionButtons(spaced: true),
+                  ),
+          ],
+        );
+      },
+    );
+  }
 
-                          // Navigate to the home screen
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const HomeScreen(),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 50, vertical: 15),
-                        ),
-                        child: const Text(
-                          'Go to Home',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          await _downloadReceipt();
-                          final userId = FirebaseAuth.instance.currentUser?.uid;
-                          if (userId != null) {
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(userId)
-                                .update({'status': 'unbooked'});
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 50, vertical: 15),
-                        ),
-                        child: const Text(
-                          'Download Receipt',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  );
-          },
-        )
+  Widget _buildRecyclablesAsTable(List<Map<String, dynamic>> recyclables) {
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(3),
+        1: FlexColumnWidth(2),
+        2: FlexColumnWidth(2),
+        3: FlexColumnWidth(2),
+      },
+      border: TableBorder.all(color: Colors.grey, width: 0.5),
+      children: [
+        TableRow(
+          decoration: BoxDecoration(color: Colors.grey[300]),
+          children: const [
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child:
+                  Text('Type', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child:
+                  Text('Weight', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text('Price per kg',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child:
+                  Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        ...recyclables.map<TableRow>((recyclable) {
+          return TableRow(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(recyclable['type'] ?? 'Unknown'),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text('${recyclable['weight'] ?? 0} kg'),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text('₱${recyclable['price'] ?? 0}'),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                    '₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}'),
+              ),
+            ],
+          );
+        }).toList(),
       ],
     );
   }
 
-  Future<void> _downloadReceipt() async {
-    final pdf = pw.Document();
-
-    // Load the logo image as bytes
-    final ByteData logoBytes = await rootBundle.load('assets/images/logo.png');
-    final Uint8List logoImage = logoBytes.buffer.asUint8List();
-
-    // Create the PDF content
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Booking Receipt',
-                  style: pw.TextStyle(
-                      fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 10),
-              pw.Text('Date: ${_currentBookingDetails['date'] ?? ''}'),
-              pw.Text('Driver: ${_currentBookingDetails['driver'] ?? 'N/A'}'),
-              pw.Text('Vehicle: ${_currentBookingDetails['vehicle'] ?? 'N/A'}'),
-              pw.SizedBox(height: 20),
-              pw.Text('Recyclables:',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Table.fromTextArray(
-                headers: ['Type', 'Weight', 'Price per kg', 'Total'],
-                data: _currentBookingDetails['recyclables']
-                    .map<List<dynamic>>((recyclable) => [
-                          recyclable['type'] ?? 'Unknown',
-                          '${recyclable['weight'] ?? 0} kg',
-                          'php ${recyclable['price'] ?? 0}',
-                          'php ${((recyclable['weight'] ?? 0) * (recyclable['price'] ?? 0)).toStringAsFixed(2)}'
-                        ])
-                    .toList(),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text(_currentBookingDetails['mode'] == 'donate'
-                  ? ''
-                  : 'Collection Fee: php 40'),
-              pw.Text(
-                  'Total Weight: ${_currentBookingDetails['total_weight'] ?? 0} kg'),
-              pw.Text(_currentBookingDetails['mode'] == 'donate'
-                  ? 'Total Price Received: php 0'
-                  : 'Total Price Received: php ${_currentBookingDetails['final_total_price'] - 40}'),
-              pw.SizedBox(height: 20),
-              pw.Center(
-                child: pw.Image(
-                  pw.MemoryImage(logoImage),
-                  height: 50,
-                  width: 100,
+  Widget _buildRecyclablesAsList(List<Map<String, dynamic>> recyclables) {
+    return Column(
+      children: recyclables.map((recyclable) {
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Type: ${recyclable['type'] ?? 'Unknown'}'),
+                Text('Weight: ${recyclable['weight'] ?? 0} kg'),
+                Text('Price per kg: ₱${recyclable['price'] ?? 0}'),
+                Text(
+                  'Total: ₱${((recyclable['item_price'] ?? 0)).toStringAsFixed(2)}',
                 ),
-              ),
-            ],
-          );
-        },
-      ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
+  }
 
-    // Save the PDF as Uint8List
-    final Uint8List pdfBytes = await pdf.save();
+  List<Widget> _buildActionButtons({bool spaced = false}) {
+    return [
+      ElevatedButton(
+        onPressed: () async {
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId != null) {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .update({'status': 'unbooked'});
+          }
 
-    // Create a Blob and a URL to represent the PDF
-    final blob = html.Blob([pdfBytes], 'application/pdf');
-    final url = html.Url.createObjectUrlFromBlob(blob);
+          Navigator.pushNamed(context, '/');
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green[700],
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+        ),
+        child: const Text(
+          'Go to Home',
+          style: TextStyle(fontSize: 16, color: Colors.white),
+        ),
+      ),
+      const SizedBox(width: 20, height: 20),
+      ElevatedButton(
+        onPressed: () async {
+          await _downloadReceipt();
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId != null) {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .update({'status': 'unbooked'});
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green[700],
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+        ),
+        child: const Text(
+          'Download Receipt',
+          style: TextStyle(fontSize: 16, color: Colors.white),
+        ),
+      ),
+      const SizedBox(width: 20, height: 20),
+      ElevatedButton(
+        onPressed: () async {
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId != null) {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .update({'status': 'unbooked'});
+          }
 
-    // Open the PDF in a new browser tab
-    html.window.open(url, '_blank');
+          Navigator.pushNamed(context, '/Book');
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green[700],
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+        ),
+        child: const Text(
+          'Book Again',
+          style: TextStyle(fontSize: 16, color: Colors.white),
+        ),
+      ),
+    ];
+  }
 
-    // Revoke the URL after opening to free memory
-    html.Url.revokeObjectUrl(url);
+  Future<void> _downloadReceipt() async {
+    try {
+      final pdf = pw.Document();
 
-    // Update Firestore status after viewing the receipt
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .update({'status': 'unbooked'});
+      // Load the logo image as bytes
+      final ByteData logoBytes =
+          await rootBundle.load('assets/images/logo.png');
+      final Uint8List logoImage = logoBytes.buffer.asUint8List();
+
+      // Extract booking details
+      final bookingDate = _currentBookingDetails['date'];
+      final formattedBookingDate = bookingDate is DateTime
+          ? DateFormat('MM/dd/yyyy').format(bookingDate)
+          : 'N/A';
+
+      final booking = {
+        'driver': _currentBookingDetails['driver'] ?? 'Not Yet Assigned',
+        'vehicle': _currentBookingDetails['vehicle'] ?? 'Not Yet Assigned',
+        'status': _currentBookingDetails['status'] ?? 'booked',
+        'recyclables': _currentBookingDetails['recyclables'] ?? [],
+        'total_weight': _currentBookingDetails['total_weight'] ?? 0.0,
+        'final_total_weight':
+            _currentBookingDetails['final_total_weight'] ?? 0.0,
+        'total_price': _currentBookingDetails['total_price'] ?? 0.0,
+        'final_total_price': _currentBookingDetails['final_total_price'] ?? 0.0,
+        'calculated_total_price':
+            _currentBookingDetails['calculated_total_price'] ?? 0.0,
+        'mode': _currentBookingDetails['mode'] ?? 'unknown',
+        'category': _currentBookingDetails['category'] ?? '',
+      };
+
+      // Create the PDF content
+      pdf.addPage(
+        pw.Page(
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Logo and Title
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Trashure Booking Receipt',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Image(
+                      pw.MemoryImage(logoImage),
+                      height: 50,
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+
+                // Booking Details
+                pw.Text(
+                  'Booking Details',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Date: $formattedBookingDate'),
+                pw.Text('Driver: ${booking['driver']}'),
+                pw.Text('Vehicle: ${booking['vehicle']}'),
+                pw.Text(
+                  'Status: ${booking['status']}',
+                  style: pw.TextStyle(
+                    color: booking['status'] == 'collected'
+                        ? PdfColors.green
+                        : PdfColors.orange,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                // Recyclables Table
+                pw.Text(
+                  'Recyclables',
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Table.fromTextArray(
+                  headers: [
+                    'Type',
+                    'Weight (kg)',
+                    if (booking['status'] == 'collected') 'Final Weight (kg)',
+                    'Price per kg',
+                    'Item Price',
+                    if (booking['status'] == 'collected') 'Final Item Price',
+                  ],
+                  data: booking['recyclables'].map<List<dynamic>>((recyclable) {
+                    return [
+                      recyclable['type'] ?? 'Unknown',
+                      '${recyclable['weight'] ?? 0} kg',
+                      if (booking['status'] == 'collected')
+                        '${recyclable['final_weight'] ?? 0} kg',
+                      'PHP${recyclable['price'] ?? 0}',
+                      'PHP${(recyclable['item_price'] ?? 0).toStringAsFixed(2)}',
+                      if (booking['status'] == 'collected')
+                        'PHP${(recyclable['final_item_price'] ?? 0).toStringAsFixed(2)}',
+                    ];
+                  }).toList(),
+                ),
+                pw.SizedBox(height: 20),
+
+                // Summary
+                pw.Text(
+                  'Summary',
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text(
+                  'Total Weight: ${booking['total_weight']} kg',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text(
+                  booking['mode'] == 'donate'
+                      ? 'Total Price: PHP0'
+                      : booking['category'] == 'business'
+                          ? 'Total Price: PHP ${booking['total_price']}'
+                          : 'Total Price: PHP ${booking['total_price']} - 40 = PHP${booking['calculated_total_price']}',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      // Save the PDF
+      final Uint8List pdfBytes = await pdf.save();
+
+      // Trigger download with an anchor element
+      final blob = html.Blob([pdfBytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..target = 'blank'
+        ..download = 'Trashure_Booking_Receipt.pdf'
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      // Show success toast
+      Fluttertoast.showToast(
+        msg: 'Receipt downloaded successfully!',
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
+      );
+    } catch (e) {
+      // Show error toast
+      Fluttertoast.showToast(
+        msg: 'Error downloading receipt: $e',
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+      );
     }
   }
 
@@ -678,6 +809,7 @@ class _SelectionScreenState extends State<SelectionScreen> {
       'driver': _currentBookingDetails['driver'] ?? 'Not Yet Assigned',
       'vehicle': _currentBookingDetails['vehicle'] ?? 'Not Yet Assigned',
       'status': _currentBookingDetails['status'] ?? 'booked',
+      'category': _currentBookingDetails['category'] ?? '',
       'recyclables': _currentBookingDetails['recyclables'] ?? [],
       'total_weight': _currentBookingDetails['total_weight'] ?? 0.0,
       'total_price': _currentBookingDetails['total_price'] ?? 0.0,
@@ -796,7 +928,9 @@ class _SelectionScreenState extends State<SelectionScreen> {
                 Text(
                   booking['mode'] == 'donate'
                       ? 'Total Price: ₱0'
-                      : 'Total Price: ₱${booking['total_price']} - 40 = ₱${booking['calculated_total_price']}',
+                      : (booking['category'] == 'business'
+                          ? 'Total Price: ₱${booking['total_price']}'
+                          : 'Total Price: ₱${booking['total_price']} - 40 = ₱${booking['calculated_total_price']}'),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,

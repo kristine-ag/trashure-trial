@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
 class BookingHistoryScreen extends StatefulWidget {
   const BookingHistoryScreen({super.key});
@@ -25,34 +26,20 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     _fetchDriverList();
   }
 
-  // Fetch list of drivers from Firestore
   Future<void> _fetchDriverList() async {
     try {
       final driversSnapshot = await FirebaseFirestore.instance
           .collection('employees')
           .where('position', whereIn: ['driver', 'contractual driver']).get();
 
-      if (driversSnapshot.docs.isEmpty) {
-        print('No drivers found in the employee collection.');
-      }
-
       List<String> drivers = driversSnapshot.docs
-          .map((doc) {
-            if (doc.data().containsKey('name')) {
-              return doc['name'] as String;
-            } else {
-              print('Document ${doc.id} is missing the "name" field.');
-              return null;
-            }
-          })
+          .map((doc) => doc.data()['name'] as String?)
           .whereType<String>()
           .toList();
 
       setState(() {
         _driverList = drivers;
       });
-
-      print('Driver list fetched successfully: $_driverList');
     } catch (e) {
       print('Error fetching driver list: $e');
     }
@@ -109,6 +96,17 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           finalItemPrice += weight * pricePerKg;
         }
 
+        // Fetch the customer reviews in the bookings collection
+        final customerReviewSnapshot = await FirebaseFirestore.instance
+            .collection('bookings')
+            .doc(bookingId)
+            .collection('customer_review')
+            .where('user_id', isEqualTo: userId) // Filter reviews by user_id
+            .get();
+
+        List<Map<String, dynamic>> reviews =
+            customerReviewSnapshot.docs.map((doc) => doc.data()).toList();
+
         bookingHistory.add({
           'date': bookingData['date'] ?? DateTime.now(),
           'bookingId': bookingId,
@@ -118,8 +116,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           'recyclables': recyclables,
           'final_weight': finalWeight,
           'final_item_price': finalItemPrice,
-          'final_total_weight': userData['final_total_weight'] ?? 0.0,
-          'final_total_price': userData['final_total_price'] ?? 0.0,
+          'reviews': reviews,
         });
       }
 
@@ -159,80 +156,167 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     });
   }
 
-  Widget _buildBookingTable(List<Map<String, dynamic>> bookings) {
-    return Column(
-      children: bookings.map((booking) {
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+  Widget _buildBookingTable(
+      BuildContext context, List<Map<String, dynamic>> bookings) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 600;
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: bookings.length,
+          itemBuilder: (context, index) {
+            final booking = bookings[index];
+            final date = (booking['date'] as Timestamp).toDate();
+            final recyclables =
+                booking['recyclables'] as List<Map<String, dynamic>>;
+            final reviews = booking['reviews'] as List<Map<String, dynamic>>;
+
+            return isDesktop
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                          flex: 2,
+                          child: _buildBookingDetailsCard(
+                              date, booking, recyclables)),
+                      Expanded(
+                          flex: 1, child: _buildCustomerReviewCard(reviews)),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      _buildBookingDetailsCard(date, booking, recyclables),
+                      _buildCustomerReviewCard(reviews),
+                    ],
+                  );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBookingDetailsCard(DateTime date, Map<String, dynamic> booking,
+      List<Map<String, dynamic>> recyclables) {
+    return Card(
+      margin: const EdgeInsets.all(8.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ExpansionTile(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Date: ${DateFormat('MM/dd/yyyy').format(date)}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text('Booking ID: ${booking['bookingId'] ?? 'N/A'}'),
+            Text('Driver: ${booking['driver']}'),
+            Text(
+              'Status: ${booking['status']}',
+              style: TextStyle(
+                color: booking['status'] == 'collected'
+                    ? Colors.green
+                    : Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(1),
+                2: FlexColumnWidth(1),
+              },
+              border: TableBorder.all(color: Colors.grey),
+              children: recyclables.map((item) {
+                return TableRow(
+                  children: [
+                    Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(item['type'] ?? 'Unknown')),
+                    Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text('${item['weight'] ?? 0} kg')),
+                    Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text('₱${item['price'] ?? 0}')),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
-          child: ExpansionTile(
-            backgroundColor: Colors.grey[100],
-            title: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Align(
+              alignment: Alignment.centerLeft, // Align content to the left
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment
+                    .start, // Ensure left alignment for the column's children
                 children: [
                   Text(
-                    'Date: ${DateFormat('MM/dd/yyyy').format((booking['date'] as Timestamp).toDate())}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    'Total Weight: ${booking['final_weight']?.toStringAsFixed(2) ?? '0.00'} kg',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 4),
-                  Text('Booking ID: ${booking['bookingId'] ?? 'N/A'}'),
-                  Text('Driver: ${booking['driver']}'),
-                  Text('Vehicle: ${booking['vehicle']}'),
                   Text(
-                    'Status: ${booking['status']}',
-                    style: TextStyle(
-                      color: booking['status'] == 'collected'
-                          ? Colors.green
-                          : Colors.orange,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    'Total Price: ₱${booking['final_item_price']?.toStringAsFixed(2) ?? '0.00'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
             ),
-            children: [
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Recyclables',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    ...booking['recyclables'].map<Widget>((recyclable) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Text(
-                          '${recyclable['type'] ?? 'Unknown'}: ${recyclable['weight'] ?? 0} kg at ₱${recyclable['price'] ?? 0}',
-                        ),
-                      );
-                    }).toList(),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Total Weight: ${booking['final_weight']} kg',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    Text(
-                      'Total Price: ₱${booking['final_item_price']}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
-        );
-      }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerReviewCard(List<Map<String, dynamic>> reviews) {
+    return Card(
+      margin: const EdgeInsets.all(8.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Customer Reviews',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            ...reviews.map((review) {
+              final reviewDate = (review['date'] as Timestamp).toDate();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RatingBarIndicator(
+                    rating: review['rating'] ?? 0.0,
+                    itemBuilder: (context, _) =>
+                        const Icon(Icons.star, color: Colors.amber),
+                    itemCount: 5,
+                    itemSize: 20.0,
+                  ),
+                  Text('Feedback: ${review['feedback'] ?? 'N/A'}'),
+                  Text(
+                    'Date: ${DateFormat('MM/dd/yyyy').format(reviewDate)}',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              );
+            }).toList(),
+          ],
+        ),
+      ),
     );
   }
 
@@ -240,9 +324,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.start, // Align items to the start
         children: [
-          // Date filter button
           ElevatedButton(
             onPressed: () async {
               final pickedDate = await showDatePicker(
@@ -261,8 +343,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
             },
             child: const Text('Filter by Date'),
           ),
-          const SizedBox(width: 10), // Spacing between filters
-          // Driver dropdown
+          const SizedBox(width: 10),
           DropdownButton<String>(
             value: _selectedDriver,
             hint: const Text('Filter by Driver'),
@@ -274,14 +355,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
               });
             },
             items: [
-              const DropdownMenuItem(
-                value: 'All',
-                child: Text('Filter by Driver'),
-              ),
-              ..._driverList.map((driver) => DropdownMenuItem(
-                    value: driver,
-                    child: Text(driver),
-                  )),
+              const DropdownMenuItem(value: 'All', child: Text('All Drivers')),
+              ..._driverList.map((driver) =>
+                  DropdownMenuItem(value: driver, child: Text(driver))),
             ],
           ),
         ],
@@ -301,8 +377,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           _buildFilterWidget(),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(8.0),
-              child: _buildBookingTable(_filteredBookings),
+              child: _buildBookingTable(context, _filteredBookings),
             ),
           ),
         ],
